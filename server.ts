@@ -624,16 +624,210 @@ app.delete('/api/github/user/starred/:owner/:repo', async (req: Request, res: Re
   }
 });
 
-// Check if repo is starred
-app.get('/api/github/user/starred/:owner/:repo', async (req: Request, res: Response) => {
-  const token = getToken(req);
-  if (!token) return res.json({ starred: false });
-  const { owner, repo } = req.params;
+// ---------------- OpenRouter Proxy & Diagnostics Endpoints ---------------- //
+
+// POST /api/openrouter/test: Test connection & fetch diagnostics
+app.post('/api/openrouter/test', async (req: Request, res: Response) => {
+  const apiKey = (req.body.apiKey || process.env.OPENROUTER_API_KEY || '').trim();
+
+  if (!apiKey) {
+    res.json({
+      status: 'error',
+      errorCategory: 'missing_key',
+      errorMessage: 'Missing API Key. Please enter your OpenRouter API Key in Settings.',
+      suggestedFix: 'Get an API key from https://openrouter.ai/keys and paste it into OpenRouter Settings.',
+    });
+    return;
+  }
+
+  const startTime = Date.now();
   try {
-    const { response } = await githubFetch(`/user/starred/${owner}/${repo}`, token);
-    res.json({ starred: response.status === 204 });
-  } catch {
-    res.json({ starred: false });
+    const keyRes = await fetch('https://openrouter.ai/api/v1/auth/key', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': getAppUrl(req),
+        'X-Title': 'ColorPop Roleplay Hub',
+      },
+    });
+
+    const latencyMs = Date.now() - startTime;
+
+    if (!keyRes.ok) {
+      const errJson = await keyRes.json().catch(() => ({}));
+      const statusCode = keyRes.status;
+
+      let errorCategory: string = 'network_error';
+      let errorMessage = errJson?.error?.message || `OpenRouter returned HTTP ${statusCode}`;
+      let suggestedFix = 'Check your OpenRouter account status and API keys.';
+
+      if (statusCode === 401) {
+        errorCategory = 'auth_failed';
+        errorMessage = 'Invalid OpenRouter API Key (401 Unauthorized).';
+        suggestedFix = 'Double check that your key begins with "sk-or-v1-" and has not been revoked at openrouter.ai/keys.';
+      } else if (statusCode === 402) {
+        errorCategory = 'no_credits';
+        errorMessage = 'Insufficient Credits (402 Payment Required).';
+        suggestedFix = 'Add credit balance to your account at https://openrouter.ai/credits or choose a free model.';
+      } else if (statusCode === 429) {
+        errorCategory = 'rate_limited';
+        errorMessage = 'Rate limit exceeded on OpenRouter (429 Too Many Requests).';
+        suggestedFix = 'Wait a few seconds before testing again, or upgrade your OpenRouter account tier.';
+      }
+
+      res.json({
+        status: 'error',
+        statusCode,
+        errorCategory,
+        errorMessage,
+        suggestedFix,
+        latencyMs,
+      });
+      return;
+    }
+
+    const keyData = await keyRes.json();
+    const data = keyData?.data || {};
+
+    res.json({
+      status: 'connected',
+      latencyMs,
+      label: data.label || 'Default Key',
+      limit: data.limit,
+      usage: data.usage,
+      isFreeTier: data.is_free_tier,
+      rateLimit: data.rate_limit,
+    });
+  } catch (err: any) {
+    res.json({
+      status: 'error',
+      errorCategory: 'network_error',
+      errorMessage: err.message || 'Failed to reach OpenRouter API servers.',
+      suggestedFix: 'Check your internet connection and verify openrouter.ai is operational.',
+      latencyMs: Date.now() - startTime,
+    });
+  }
+});
+
+// POST /api/openrouter/chat: Proxies completions with prompt assembly
+app.post('/api/openrouter/chat', async (req: Request, res: Response) => {
+  const apiKey = (req.body.apiKey || process.env.OPENROUTER_API_KEY || '').trim();
+  const { model, messages, temperature, maxTokens, topP } = req.body;
+
+  if (!apiKey) {
+    res.status(401).json({
+      error: 'Missing OpenRouter API Key',
+      errorCategory: 'missing_key',
+      message: 'Please provide an OpenRouter API key in Settings.',
+    });
+    return;
+  }
+
+  const chosenModel = model || 'gryphe/mythomax-l2-13b';
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': getAppUrl(req),
+        'X-Title': 'ColorPop Roleplay Hub',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: chosenModel,
+        messages,
+        temperature: temperature ?? 0.85,
+        max_tokens: maxTokens ?? 1024,
+        top_p: topP ?? 0.95,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const err = data.error || {};
+      let errorCategory = 'model_unavailable';
+      if (response.status === 401) errorCategory = 'auth_failed';
+      if (response.status === 402) errorCategory = 'no_credits';
+      if (response.status === 429) errorCategory = 'rate_limited';
+
+      res.status(response.status).json({
+        error: err.message || `OpenRouter returned status ${response.status}`,
+        statusCode: response.status,
+        errorCategory,
+        details: err,
+      });
+      return;
+    }
+
+    const reply = data.choices?.[0]?.message?.content || '';
+    res.json({
+      content: reply,
+      model: data.model || chosenModel,
+      usage: data.usage,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: err.message || 'Failed to communicate with OpenRouter',
+      errorCategory: 'network_error',
+    });
+  }
+});
+
+// ---------------- GitHub Auto-Push Endpoint ---------------- //
+
+app.post('/api/git/push', async (req: Request, res: Response) => {
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+
+  const token = (process.env.GITHUB_CLIENT_ID || process.env.GITHUB_TOKEN || '').trim();
+  const repoUrl = req.body.repoUrl || 'https://github.com/norainnoflowers2294-maker/Chat-app.git';
+  const commitMsg = req.body.commitMsg || `Update ColorPop Roleplay Hub - ${new Date().toISOString()}`;
+
+  if (!token) {
+    res.status(400).json({ error: 'GitHub token not found in environment' });
+    return;
+  }
+
+  try {
+    // Configure git identity
+    await execAsync('git config user.name "norainnoflowers2294-maker"');
+    await execAsync('git config user.email "jasminew70@gmail.com"');
+
+    // Add all files
+    await execAsync('git add .');
+
+    // Commit
+    try {
+      await execAsync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`);
+    } catch {
+      // Nothing new to commit is fine
+    }
+
+    // Set authenticated remote
+    const authedUrl = repoUrl.replace('https://', `https://norainnoflowers2294-maker:${token}@`);
+    await execAsync(`git remote set-url origin "${authedUrl}" 2>/dev/null || git remote add origin "${authedUrl}"`);
+
+    // Ensure branch is main
+    await execAsync('git branch -M main');
+
+    // Push with force if needed or standard push
+    const { stdout, stderr } = await execAsync('git push -u origin main');
+
+    res.json({
+      success: true,
+      message: 'Successfully pushed all code to GitHub repository!',
+      repo: repoUrl,
+      output: stdout || stderr,
+    });
+  } catch (err: any) {
+    console.error('Git push error:', err);
+    res.status(500).json({
+      error: err.message,
+      stdout: err.stdout,
+      stderr: err.stderr,
+    });
   }
 });
 

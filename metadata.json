@@ -1,6 +1,6 @@
 {
-  "name": "GitHub Connect & Hub",
-  "description": "Connect to your GitHub account to explore repositories, pull requests, issues, commits, profile activity, and manage your GitHub projects seamlessly.",
+  "name": "ColorPop Roleplay Hub",
+  "description": "Full-scale romantic luxury roleplay chat application connected to OpenRouter AI, with character cards, lorebooks, personas, 5 active plugins, and Firebase auto-save.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

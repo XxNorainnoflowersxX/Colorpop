@@ -3,651 +3,721 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
+import { ColorPopHeader } from './components/ColorPopHeader';
+import { TopNavPill, NavTab } from './components/TopNavPill';
+import { ColorPopHero } from './components/ColorPopHero';
+import { ActionCards } from './components/ActionCards';
+import { CategoryPills, CategoryFilter } from './components/CategoryPills';
+import { RecentChatsSection } from './components/RecentChatsSection';
+import { ChatView } from './components/ChatView';
+import { CharacterModal } from './components/CharacterModal';
+import { LorebookModal } from './components/LorebookModal';
+import { PersonaModal } from './components/PersonaModal';
+import { PersonaCreatorView } from './components/PersonaCreatorView';
+import { PersonaLibraryView } from './components/PersonaLibraryView';
+import { PluginModal } from './components/PluginModal';
+import { OpenRouterSettingsModal } from './components/OpenRouterSettingsModal';
+import { StoryNotesModal } from './components/StoryNotesModal';
+import { SavedMessagesModal } from './components/SavedMessagesModal';
+import { SceneGeneratorModal } from './components/SceneGeneratorModal';
+import { GitHubSyncModal } from './components/GitHubSyncModal';
+import { DualTrackOverlay } from './components/DualTrackOverlay';
+import { Columns, Sparkles } from 'lucide-react';
+
 import {
-  Github,
-  KeyRound,
-  Shield,
-  Layers,
-  Sparkles,
-  Search,
-  Filter,
-  ArrowUpDown,
-  RefreshCw,
-  ExternalLink,
-  BookMarked,
-  CircleDot,
-  Activity,
-  CheckCircle2,
-  Copy,
-  Check,
-  Globe,
-  Settings,
-  HelpCircle,
-} from 'lucide-react';
-import { Navbar } from './components/Navbar';
-import { ProfileHeader } from './components/ProfileHeader';
-import { RepoCard } from './components/RepoCard';
-import { ReadmeModal } from './components/ReadmeModal';
-import { IssuesList } from './components/IssuesList';
-import { ActivityFeed } from './components/ActivityFeed';
-import { ConnectModal } from './components/ConnectModal';
-import { OAuthGuideModal } from './components/OAuthGuideModal';
-import { GitHubUser, GitHubRepo, GitHubIssue, GitHubEvent, RateLimit } from './types';
+  Character,
+  Lorebook,
+  Persona,
+  Plugin,
+  Chat,
+  ChatMessage,
+  OpenRouterConfig,
+  ConnectionDiagnostic,
+  SupabaseConfig,
+  StoryMemory,
+} from './types/roleplay';
+import {
+  loadLocalData,
+  saveLocalData,
+  syncToFirebase,
+  loadFromFirebase,
+  StorageData,
+} from './lib/storage';
+import { auth } from './lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 export default function App() {
-  const [user, setUser] = useState<GitHubUser | null>(null);
-  const [rateLimit, setRateLimit] = useState<RateLimit | undefined>();
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [devRedirectUri, setDevRedirectUri] = useState('https://ais-dev-ohlfym6cwp4w2lwha7oenj-597148229967.us-east1.run.app/auth/callback');
-  const [previewRedirectUri, setPreviewRedirectUri] = useState('https://ais-pre-ohlfym6cwp4w2lwha7oenj-597148229967.us-east1.run.app/auth/callback');
-  
-  const [isGuest, setIsGuest] = useState(false);
-  const [guestUsername, setGuestUsername] = useState<string | null>(null);
-
-  const [repos, setRepos] = useState<GitHubRepo[]>([]);
-  const [issues, setIssues] = useState<GitHubIssue[]>([]);
-  const [pulls, setPulls] = useState<any[]>([]);
-  const [events, setEvents] = useState<GitHubEvent[]>([]);
-
-  const [loading, setLoading] = useState(true);
-  const [loadingData, setLoadingData] = useState(false);
-
-  // Active view tab
-  const [activeTab, setActiveTab] = useState<'repos' | 'issues' | 'activity' | 'settings'>('repos');
-
-  // Repos filtering & search
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'updated' | 'stars' | 'name' | 'forks'>('updated');
+  const [data, setData] = useState<StorageData>(loadLocalData);
+  const [activeTab, setActiveTab] = useState<NavTab>('home');
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
+  const [inChatMode, setInChatMode] = useState(false);
+  const [activeChat, setActiveChat] = useState<Chat | null>(null);
 
   // Modals
-  const [isConnectOpen, setIsConnectOpen] = useState(false);
-  const [isGuideOpen, setIsGuideOpen] = useState(false);
-  const [readmeRepo, setReadmeRepo] = useState<GitHubRepo | null>(null);
+  const [isCharModalOpen, setIsCharModalOpen] = useState(false);
+  const [isLoreModalOpen, setIsLoreModalOpen] = useState(false);
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
+  const [isPluginModalOpen, setIsPluginModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isStoryNotesOpen, setIsStoryNotesOpen] = useState(false);
+  const [isSavedMessagesOpen, setIsSavedMessagesOpen] = useState(false);
+  const [isSceneGeneratorOpen, setIsSceneGeneratorOpen] = useState(false);
+  const [isGitSyncOpen, setIsGitSyncOpen] = useState(false);
 
-  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  // Persona Page & Creator Mode
+  const [isPersonaCreatorOpen, setIsPersonaCreatorOpen] = useState(false);
+  const [personaToEdit, setPersonaToEdit] = useState<Persona | null>(null);
 
-  // 1. Fetch Auth Status
-  const fetchAuthStatus = async () => {
-    try {
-      const res = await fetch('/api/auth/status');
-      const data = await res.json();
+  // Dual Track Screen State (Left and Right Slide-over Panels)
+  const [isDualTrackOpen, setIsDualTrackOpen] = useState(false);
 
-      setIsConfigured(Boolean(data.configured));
-      if (data.devRedirectUri) setDevRedirectUri(data.devRedirectUri);
-      if (data.previewRedirectUri) setPreviewRedirectUri(data.previewRedirectUri);
+  // Firebase user
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
 
-      if (data.authenticated && data.user) {
-        setUser(data.user);
-        setIsGuest(false);
-        setGuestUsername(null);
-        if (data.rateLimit) setRateLimit(data.rateLimit);
-        fetchUserData(data.user.login, false);
-      } else if (!user && !guestUsername) {
-        // By default show Octocat preview or empty state
-        loadPreviewUser('octocat');
-      }
-    } catch (err) {
-      console.error('Failed to check auth status:', err);
-    } finally {
-      setLoading(false);
-    }
+  // OpenRouter Connection Diagnostics
+  const [diagnostic, setDiagnostic] = useState<ConnectionDiagnostic>({
+    status: 'untested',
+    lastChecked: null,
+  });
+
+  // Sync state on change
+  const updateData = (newData: StorageData) => {
+    setData(newData);
+    saveLocalData(newData);
+    syncToFirebase(newData);
   };
 
-  // 2. Fetch Repos, Issues, Pulls, and Activity
-  const fetchUserData = async (username: string, guestMode: boolean) => {
-    setLoadingData(true);
+  // Test OpenRouter Connection
+  const testOpenRouter = async (customKey?: string) => {
+    const key = customKey ?? data.openRouterConfig.apiKey;
+    setDiagnostic((prev) => ({ ...prev, status: 'testing' }));
+
     try {
-      // Repos
-      const reposUrl = guestMode
-        ? `/api/github/repos?username=${encodeURIComponent(username)}`
-        : '/api/github/repos';
-      const reposRes = await fetch(reposUrl);
-      const reposData = await reposRes.json();
-      if (reposRes.ok && Array.isArray(reposData.repos)) {
-        setRepos(reposData.repos);
-        if (reposData.rateLimit) setRateLimit(reposData.rateLimit);
-      }
+      const res = await fetch('/api/openrouter/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key }),
+      });
 
-      // Events / Activity
-      const eventsUrl = guestMode
-        ? `/api/github/events?username=${encodeURIComponent(username)}`
-        : '/api/github/events';
-      const eventsRes = await fetch(eventsUrl);
-      const eventsData = await eventsRes.json();
-      if (eventsRes.ok && Array.isArray(eventsData.events)) {
-        setEvents(eventsData.events);
-      }
+      const resData = await res.json();
 
-      // Issues & Pulls (authenticated only)
-      if (!guestMode) {
-        const [issuesRes, pullsRes] = await Promise.all([
-          fetch('/api/github/issues'),
-          fetch('/api/github/pulls'),
-        ]);
-
-        const issuesData = await issuesRes.json();
-        const pullsData = await pullsRes.json();
-
-        if (issuesRes.ok && Array.isArray(issuesData.issues)) {
-          setIssues(issuesData.issues);
-        }
-        if (pullsRes.ok && Array.isArray(pullsData.pulls)) {
-          setPulls(pullsData.pulls);
-        }
+      if (resData.status === 'connected') {
+        setDiagnostic({
+          status: 'connected',
+          lastChecked: Date.now(),
+          latencyMs: resData.latencyMs,
+          statusCode: 200,
+        });
       } else {
-        setIssues([]);
-        setPulls([]);
+        setDiagnostic({
+          status: 'error',
+          lastChecked: Date.now(),
+          statusCode: resData.statusCode,
+          errorCategory: resData.errorCategory,
+          errorMessage: resData.errorMessage || 'Failed to connect to OpenRouter',
+          suggestedFix: resData.suggestedFix,
+          latencyMs: resData.latencyMs,
+        });
       }
-    } catch (err) {
-      console.error('Error fetching user data:', err);
-    } finally {
-      setLoadingData(false);
+    } catch (err: any) {
+      setDiagnostic({
+        status: 'error',
+        lastChecked: Date.now(),
+        errorCategory: 'network_error',
+        errorMessage: err.message || 'Network error reaching backend proxy',
+        suggestedFix: 'Verify your network connection and server status.',
+      });
     }
   };
 
-  // Load preview profile
-  const loadPreviewUser = async (username: string) => {
-    try {
-      setLoadingData(true);
-      const res = await fetch(`/api/github/user?username=${encodeURIComponent(username)}`);
-      const data = await res.json();
-      if (res.ok && data.user) {
-        setUser(data.user);
-        setIsGuest(true);
-        setGuestUsername(username);
-        if (data.rateLimit) setRateLimit(data.rateLimit);
-        fetchUserData(username, true);
-      }
-    } catch (err) {
-      console.error('Failed to load preview user:', err);
-    } finally {
-      setLoadingData(false);
-    }
-  };
-
-  // Logout / Disconnect
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      setUser(null);
-      setIsGuest(false);
-      setGuestUsername(null);
-      setRepos([]);
-      setIssues([]);
-      setPulls([]);
-      setEvents([]);
-      // Reset to preview
-      loadPreviewUser('octocat');
-    } catch (err) {
-      console.error('Logout error:', err);
-    }
-  };
-
-  // Popup postMessage listener per OAuth skill guidelines
+  // Initialize
   useEffect(() => {
-    fetchAuthStatus();
+    // Check initial active chat
+    if (data.activeChatId) {
+      const found = data.chats.find((c) => c.id === data.activeChatId);
+      if (found) setActiveChat(found);
+    } else if (data.chats.length > 0) {
+      setActiveChat(data.chats[0]);
+    }
 
-    const handleMessage = (event: MessageEvent) => {
-      const origin = event.origin;
-      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
-        return;
+    // Auth state listener
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      setFirebaseUser(u);
+      if (u) {
+        const remote = await loadFromFirebase();
+        if (remote) {
+          setData((prev) => ({
+            ...prev,
+            characters: remote.characters || prev.characters,
+            chats: remote.chats || prev.chats,
+            lorebooks: remote.lorebooks || prev.lorebooks,
+            personas: remote.personas || prev.personas,
+            storyMemories: remote.storyMemories || prev.storyMemories,
+            savedMessages: remote.savedMessages || prev.savedMessages,
+          }));
+        }
       }
-      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
-        fetchAuthStatus();
-      }
-    };
+    });
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    // Test OpenRouter if key exists
+    if (data.openRouterConfig.apiKey) {
+      testOpenRouter(data.openRouterConfig.apiKey);
+    } else {
+      setDiagnostic({
+        status: 'error',
+        lastChecked: Date.now(),
+        errorCategory: 'missing_key',
+        errorMessage: 'OpenRouter API Key is not set.',
+        suggestedFix: 'Click "Setup OpenRouter" or open Settings to enter your API key from openrouter.ai/keys.',
+      });
+    }
+
+    return () => unsubscribe();
   }, []);
 
-  // Filtered & Sorted Repositories
-  const filteredRepos = useMemo(() => {
-    return repos
-      .filter((repo) => {
-        const matchesQuery =
-          repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (repo.description && repo.description.toLowerCase().includes(searchQuery.toLowerCase()));
-        const matchesLang =
-          selectedLanguage === 'all' || repo.language === selectedLanguage;
-        return matchesQuery && matchesLang;
-      })
-      .sort((a, b) => {
-        if (sortBy === 'stars') return (b.stargazers_count || 0) - (a.stargazers_count || 0);
-        if (sortBy === 'forks') return (b.forks_count || 0) - (a.forks_count || 0);
-        if (sortBy === 'name') return a.name.localeCompare(b.name);
-        return new Date(b.pushed_at || b.updated_at).getTime() - new Date(a.pushed_at || a.updated_at).getTime();
-      });
-  }, [repos, searchQuery, selectedLanguage, sortBy]);
-
-  const availableLanguages = useMemo(() => {
-    const set = new Set<string>();
-    repos.forEach((r) => {
-      if (r.language) set.add(r.language);
-    });
-    return Array.from(set).sort();
-  }, [repos]);
-
-  const copyUrl = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedUrl(id);
-    setTimeout(() => setCopiedUrl(null), 2000);
+  // Handlers for updates
+  const handleUpdateChat = (updatedChat: Chat) => {
+    const updatedChats = data.chats.map((c) => (c.id === updatedChat.id ? updatedChat : c));
+    setActiveChat(updatedChat);
+    updateData({ ...data, chats: updatedChats, activeChatId: updatedChat.id });
   };
 
+  const handleSelectChat = (chatId: string) => {
+    const chat = data.chats.find((c) => c.id === chatId);
+    if (chat) {
+      setActiveChat(chat);
+      setInChatMode(true);
+      updateData({ ...data, activeChatId: chat.id });
+    }
+  };
+
+  const handleStartChatWithCharacter = (char: Character) => {
+    let chat = data.chats.find((c) => c.characterIds.includes(char.id));
+    if (!chat) {
+      const activePersona = data.personas.find((p) => p.is_default) || data.personas[0];
+      chat = {
+        id: `chat_${Date.now()}`,
+        title: char.name,
+        characterIds: [char.id],
+        personaId: activePersona?.id || 'persona_siren',
+        lorebookIds: data.lorebooks.slice(0, 3).map((l) => l.id),
+        pluginIds: data.plugins.slice(0, 5).map((p) => p.id),
+        scenario: char.scenario || 'Late night encounters in the ColorPop universe.',
+        bgImage: char.avatar || '/penthouse.jpg',
+        relationshipScore: 88,
+        messages: [
+          {
+            id: `msg_first_${Date.now()}`,
+            senderId: char.id,
+            senderName: char.name,
+            avatar: char.avatar,
+            content: char.first_mes,
+            timestamp: Date.now(),
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      updateData({ ...data, chats: [chat, ...data.chats], activeChatId: chat.id });
+    }
+    setActiveChat(chat);
+    setInChatMode(true);
+  };
+
+  const handleSaveCharacter = (char: Character) => {
+    const exists = data.characters.find((c) => c.id === char.id);
+    const updated = exists
+      ? data.characters.map((c) => (c.id === char.id ? char : c))
+      : [char, ...data.characters];
+    updateData({ ...data, characters: updated });
+  };
+
+  const handleSaveLorebook = (lore: Lorebook) => {
+    const exists = data.lorebooks.find((l) => l.id === lore.id);
+    const updated = exists
+      ? data.lorebooks.map((l) => (l.id === lore.id ? lore : l))
+      : [lore, ...data.lorebooks];
+    updateData({ ...data, lorebooks: updated });
+  };
+
+  const handleSavePersona = (persona: Persona) => {
+    const exists = data.personas.find((p) => p.id === persona.id);
+    let updated: Persona[];
+    if (exists) {
+      updated = data.personas.map((p) => (p.id === persona.id ? persona : p));
+    } else {
+      updated = [persona, ...data.personas];
+    }
+    // If this persona is marked default, set all others to false
+    if (persona.is_default) {
+      updated = updated.map((p) => ({ ...p, is_default: p.id === persona.id }));
+    }
+    updateData({ ...data, personas: updated });
+  };
+
+  const handleDeletePersona = (personaId: string) => {
+    const updated = data.personas.filter((p) => p.id !== personaId);
+    // If the deleted persona was default, ensure there's at least one default
+    const hasDefault = updated.some((p) => p.is_default);
+    const ensured = updated.map((p, idx) => ({
+      ...p,
+      is_default: hasDefault ? p.is_default : idx === 0,
+    }));
+    updateData({ ...data, personas: ensured });
+  };
+
+  const handleSelectDefaultPersona = (pId: string) => {
+    const updated = data.personas.map((p) => ({ ...p, is_default: p.id === pId }));
+    updateData({ ...data, personas: updated });
+    try {
+      localStorage.setItem('colorpop_default_persona', pId);
+    } catch (e) {}
+  };
+
+  const handleStartChatWithPersona = (persona: Persona) => {
+    handleSelectDefaultPersona(persona.id);
+    if (activeChat) {
+      setInChatMode(true);
+    } else if (data.chats.length > 0) {
+      setActiveChat(data.chats[0]);
+      setInChatMode(true);
+    }
+  };
+
+  const handleTogglePlugin = (pluginId: string) => {
+    const updated = data.plugins.map((p) => (p.id === pluginId ? { ...p, enabled: !p.enabled } : p));
+    updateData({ ...data, plugins: updated });
+  };
+
+  const handleSaveOpenRouterConfig = (cfg: OpenRouterConfig) => {
+    updateData({ ...data, openRouterConfig: cfg });
+    testOpenRouter(cfg.apiKey);
+  };
+
+  const handleSaveSupabaseConfig = (cfg: SupabaseConfig) => {
+    updateData({ ...data, supabaseConfig: cfg });
+  };
+
+  // Story Memory Handlers
+  const handleSaveMemory = (memory: StoryMemory) => {
+    const updated = [memory, ...(data.storyMemories || [])];
+    updateData({ ...data, storyMemories: updated });
+  };
+
+  const handleDeleteMemory = (id: string) => {
+    const updated = (data.storyMemories || []).filter((m) => m.id !== id);
+    updateData({ ...data, storyMemories: updated });
+  };
+
+  // Saved Messages Bookmarks Handlers
+  const handleBookmarkMessage = (msg: ChatMessage) => {
+    const newSaved = {
+      id: `saved_${Date.now()}`,
+      chatId: activeChat?.id || 'chat_general',
+      senderName: msg.senderName,
+      avatar: msg.avatar,
+      content: msg.content,
+      timestamp: msg.timestamp || Date.now(),
+    };
+    const updated = [newSaved, ...(data.savedMessages || [])];
+    updateData({ ...data, savedMessages: updated });
+  };
+
+  const handleRemoveSavedMessage = (id: string) => {
+    const updated = (data.savedMessages || []).filter((s) => s.id !== id);
+    updateData({ ...data, savedMessages: updated });
+  };
+
+  // Scene Background Handlers
+  const handleApplySceneBackground = (chatId: string, bgUrl: string) => {
+    const updatedChats = data.chats.map((c) => (c.id === chatId ? { ...c, bgImage: bgUrl } : c));
+    if (activeChat && activeChat.id === chatId) {
+      setActiveChat({ ...activeChat, bgImage: bgUrl });
+    }
+    updateData({ ...data, chats: updatedChats });
+  };
+
+  // If in Chat Mode, render full-scale Roleplay Chat with dual track integration
+  if (inChatMode && activeChat) {
+    return (
+      <>
+        <ChatView
+          chat={activeChat}
+          allChats={data.chats}
+          characters={data.characters}
+          personas={data.personas}
+          lorebooks={data.lorebooks}
+          plugins={data.plugins}
+          openRouterConfig={data.openRouterConfig}
+          diagnostic={diagnostic}
+          onUpdateChat={handleUpdateChat}
+          onSelectChat={handleSelectChat}
+          onBackToDashboard={() => setInChatMode(false)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenPlugins={() => setIsPluginModalOpen(true)}
+          onOpenCharacterModal={() => setIsCharModalOpen(true)}
+          onOpenLorebookModal={() => setIsLoreModalOpen(true)}
+          onOpenPersonaModal={() => setIsPersonaModalOpen(true)}
+          onOpenStoryNotesModal={() => setIsStoryNotesOpen(true)}
+          onOpenSavedMessagesModal={() => setIsSavedMessagesOpen(true)}
+          onOpenSceneGeneratorModal={() => setIsSceneGeneratorOpen(true)}
+          onOpenGitHubSyncModal={() => setIsGitSyncOpen(true)}
+          onTogglePlugin={handleTogglePlugin}
+          onBookmarkMessage={handleBookmarkMessage}
+        />
+
+        {/* Global Modals (Accessible from Chat View) */}
+        <CharacterModal
+          isOpen={isCharModalOpen}
+          onClose={() => setIsCharModalOpen(false)}
+          characters={data.characters}
+          onSaveCharacter={handleSaveCharacter}
+          onStartChatWithCharacter={handleStartChatWithCharacter}
+        />
+        <LorebookModal
+          isOpen={isLoreModalOpen}
+          onClose={() => setIsLoreModalOpen(false)}
+          lorebooks={data.lorebooks}
+          onSaveLorebook={handleSaveLorebook}
+        />
+        <PersonaModal
+          isOpen={isPersonaModalOpen}
+          onClose={() => setIsPersonaModalOpen(false)}
+          personas={data.personas}
+          onSavePersona={handleSavePersona}
+          onSelectDefaultPersona={(pId) => {
+            const updated = data.personas.map((p) => ({ ...p, is_default: p.id === pId }));
+            updateData({ ...data, personas: updated });
+          }}
+        />
+        <PluginModal
+          isOpen={isPluginModalOpen}
+          onClose={() => setIsPluginModalOpen(false)}
+          plugins={data.plugins}
+          onTogglePlugin={handleTogglePlugin}
+          onSavePlugin={(p) => updateData({ ...data, plugins: [...data.plugins, p] })}
+        />
+        <OpenRouterSettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          config={data.openRouterConfig}
+          onSaveConfig={handleSaveOpenRouterConfig}
+          diagnostic={diagnostic}
+          onTestConnection={testOpenRouter}
+          supabaseConfig={data.supabaseConfig}
+          onSaveSupabaseConfig={handleSaveSupabaseConfig}
+          firebaseUser={firebaseUser}
+        />
+        <StoryNotesModal
+          isOpen={isStoryNotesOpen}
+          onClose={() => setIsStoryNotesOpen(false)}
+          memories={data.storyMemories || []}
+          chats={data.chats}
+          activeChatId={activeChat?.id}
+          onSaveMemory={handleSaveMemory}
+          onDeleteMemory={handleDeleteMemory}
+          onOpenChat={handleSelectChat}
+        />
+        <SavedMessagesModal
+          isOpen={isSavedMessagesOpen}
+          onClose={() => setIsSavedMessagesOpen(false)}
+          savedMessages={data.savedMessages || []}
+          chats={data.chats}
+          onRemoveSavedMessage={handleRemoveSavedMessage}
+          onOpenChat={handleSelectChat}
+        />
+        <SceneGeneratorModal
+          isOpen={isSceneGeneratorOpen}
+          onClose={() => setIsSceneGeneratorOpen(false)}
+          chats={data.chats}
+          activeChatId={activeChat?.id}
+          onApplySceneBackground={handleApplySceneBackground}
+        />
+        <GitHubSyncModal isOpen={isGitSyncOpen} onClose={() => setIsGitSyncOpen(false)} />
+      </>
+    );
+  }
+
+  // Dashboard View (Faithfully matching the uploaded image + Dual Track System)
   return (
-    <div className="min-h-screen bg-[#0d1117] text-[#c9d1d9] flex flex-col font-sans selection:bg-[#58a6ff]/30">
-      {/* Navigation */}
-      <Navbar
-        user={user}
-        rateLimit={rateLimit}
-        isGuest={isGuest}
-        onOpenConnect={() => setIsConnectOpen(true)}
-        onOpenGuide={() => setIsGuideOpen(true)}
-        onLogout={handleLogout}
+    <div className="min-h-screen bg-[#0d020b] text-[#ffd6eb] flex flex-col font-sans selection:bg-[#ff007f]/40 relative overflow-x-hidden">
+      {/* Background Neon Glow Orbs */}
+      <div className="fixed top-0 left-1/4 w-[500px] h-[500px] bg-[#ff007f]/10 rounded-full blur-[140px] pointer-events-none" />
+      <div className="fixed bottom-0 right-1/4 w-[500px] h-[500px] bg-[#9b51e0]/10 rounded-full blur-[140px] pointer-events-none" />
+
+      {/* 1. Header (ColorPop with Diamonds & Crown) */}
+      <ColorPopHeader
+        diagnostic={diagnostic}
+        firebaseConnected={Boolean(firebaseUser)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSearch={() => setIsCharModalOpen(true)}
+        onOpenFavorites={() => setIsSavedMessagesOpen(true)}
+        onOpenGitPush={() => setIsGitSyncOpen(true)}
+        userAvatar={firebaseUser?.photoURL || '/colorpop_hero.jpg'}
+        userName={firebaseUser?.displayName || 'The Muse'}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-8 py-6 space-y-6">
-        {/* If user is guest/preview or not logged in, show an inviting banner */}
-        {isGuest && (
-          <div className="bg-gradient-to-r from-blue-900/30 via-purple-900/20 to-[#161b22] border border-[#30363d] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="space-y-1.5 max-w-2xl">
-              <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-mono text-xs font-semibold border border-blue-500/30 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-400" /> Connect Your Account
-                </span>
-                <span className="text-xs text-[#8b949e]">Currently previewing @{user?.login}</span>
-              </div>
-              <h2 className="text-lg font-bold text-white tracking-tight">
-                Connect your personal GitHub account
-              </h2>
-              <p className="text-xs text-[#8b949e] leading-relaxed">
-                Unlock direct management of your private repositories, star projects with 1-click, file issues, and view your pull requests.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto">
-              <button
-                onClick={() => setIsConnectOpen(true)}
-                className="w-full sm:w-auto px-5 py-2.5 bg-[#238636] hover:bg-[#2ea043] text-white rounded-xl text-xs font-semibold shadow-lg hover:shadow-emerald-900/30 transition-all flex items-center justify-center space-x-2"
-              >
-                <Github className="w-4 h-4 fill-current" />
-                <span>Connect GitHub</span>
-              </button>
-              <button
-                onClick={() => setIsGuideOpen(true)}
-                className="w-full sm:w-auto px-3.5 py-2.5 bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] border border-[#30363d] rounded-xl text-xs font-medium transition-colors flex items-center justify-center space-x-1.5"
-              >
-                <HelpCircle className="w-4 h-4 text-blue-400" />
-                <span>Setup Guide</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* User Profile Banner */}
-        {user && (
-          <ProfileHeader
-            user={user}
-            repos={repos}
-            isGuest={isGuest}
-            onOpenConnect={() => setIsConnectOpen(true)}
+      {/* 2. Top Navigation Pill with Dual Track Trigger */}
+      <div className="w-full max-w-4xl mx-auto px-4 flex items-center justify-between gap-2">
+        <div className="flex-1">
+          <TopNavPill
+            activeTab={activeTab}
+            onChangeTab={(t) => {
+              setActiveTab(t);
+              if (t === 'chats') {
+                if (activeChat) setInChatMode(true);
+              } else if (t === 'characters') {
+                setIsCharModalOpen(true);
+              } else if (t === 'lorebooks') {
+                setIsLoreModalOpen(true);
+              } else if (t === 'personas') {
+                setIsPersonaCreatorOpen(false);
+                setPersonaToEdit(null);
+              }
+            }}
+            onOpenMoreMenu={() => setIsSettingsOpen(true)}
           />
-        )}
-
-        {/* Navigation Tabs Bar */}
-        <div className="flex flex-wrap items-center justify-between border-b border-[#30363d] pb-2 gap-3">
-          <div className="flex items-center space-x-1 sm:space-x-3">
-            <button
-              onClick={() => setActiveTab('repos')}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'repos'
-                  ? 'bg-[#21262d] text-white border border-[#30363d]'
-                  : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#161b22]'
-              }`}
-            >
-              <BookMarked className="w-4 h-4 text-blue-400" />
-              <span>Repositories</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-[#0d1117] text-[#8b949e] text-[10px] font-mono border border-[#30363d]">
-                {repos.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('issues')}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'issues'
-                  ? 'bg-[#21262d] text-white border border-[#30363d]'
-                  : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#161b22]'
-              }`}
-            >
-              <CircleDot className="w-4 h-4 text-emerald-400" />
-              <span>Issues &amp; Pulls</span>
-              {!isGuest && (
-                <span className="px-1.5 py-0.2 rounded-full bg-[#0d1117] text-[#8b949e] text-[10px] font-mono border border-[#30363d]">
-                  {issues.length + pulls.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('activity')}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'activity'
-                  ? 'bg-[#21262d] text-white border border-[#30363d]'
-                  : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#161b22]'
-              }`}
-            >
-              <Activity className="w-4 h-4 text-purple-400" />
-              <span>Activity Feed</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-[#0d1117] text-[#8b949e] text-[10px] font-mono border border-[#30363d]">
-                {events.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'settings'
-                  ? 'bg-[#21262d] text-white border border-[#30363d]'
-                  : 'text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#161b22]'
-              }`}
-            >
-              <Settings className="w-4 h-4 text-amber-400" />
-              <span>OAuth Config</span>
-            </button>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => user && fetchUserData(user.login, isGuest)}
-              disabled={loadingData}
-              title="Refresh GitHub Data"
-              className="p-2 text-[#8b949e] hover:text-white hover:bg-[#21262d] rounded-lg transition-colors border border-transparent hover:border-[#30363d] disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-blue-400' : ''}`} />
-            </button>
-          </div>
         </div>
 
-        {/* Tab 1: Repositories */}
-        {activeTab === 'repos' && (
-          <div className="space-y-4">
-            {/* Filter and Search Bar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#161b22] border border-[#30363d] p-3 rounded-xl">
-              {/* Search input */}
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8b949e]" />
-                <input
-                  type="text"
-                  placeholder="Find a repository..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-[#8b949e] focus:outline-none focus:border-blue-500"
-                />
-              </div>
+        {/* Prominent Track Screen Button on Dashboard */}
+        <button
+          onClick={() => setIsDualTrackOpen(true)}
+          className="shrink-0 px-3.5 py-2 rounded-full bg-gradient-to-r from-[#ff007f]/30 to-[#9b51e0]/30 hover:from-[#ff007f]/50 hover:to-[#9b51e0]/50 border border-[#ff3399]/60 text-white font-bold text-xs shadow-[0_0_15px_rgba(255,0,128,0.4)] flex items-center space-x-1.5 transition-all hover:scale-105"
+          title="Open Dual Track Screen (Slide-over panels on left and right)"
+        >
+          <Columns className="w-4 h-4 text-[#ff99cc]" />
+          <span className="hidden sm:inline">Track Screen</span>
+        </button>
+      </div>
 
-              {/* Language filter */}
-              <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-2.5 py-1 text-xs">
-                  <Filter className="w-3.5 h-3.5 text-[#8b949e]" />
-                  <select
-                    value={selectedLanguage}
-                    onChange={(e) => setSelectedLanguage(e.target.value)}
-                    className="bg-transparent text-white text-xs focus:outline-none cursor-pointer"
-                  >
-                    <option value="all" className="bg-[#161b22]">All Languages</option>
-                    {availableLanguages.map((lang) => (
-                      <option key={lang} value={lang} className="bg-[#161b22]">
-                        {lang}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+      {/* Main Dashboard Body */}
+      <main className="flex-1 max-w-7xl w-full mx-auto pb-12 space-y-4">
+        {activeTab === 'personas' ? (
+          isPersonaCreatorOpen ? (
+            <PersonaCreatorView
+              initialPersona={personaToEdit}
+              onSavePersona={(persona) => {
+                handleSavePersona(persona);
+                setIsPersonaCreatorOpen(false);
+                setPersonaToEdit(null);
+              }}
+              onCancel={() => {
+                setIsPersonaCreatorOpen(false);
+                setPersonaToEdit(null);
+              }}
+              onSelectDefaultPersona={handleSelectDefaultPersona}
+            />
+          ) : (
+            <PersonaLibraryView
+              personas={data.personas}
+              onOpenCreator={(p) => {
+                setPersonaToEdit(p || null);
+                setIsPersonaCreatorOpen(true);
+              }}
+              onSavePersona={handleSavePersona}
+              onDeletePersona={handleDeletePersona}
+              onSelectDefaultPersona={handleSelectDefaultPersona}
+              onStartChatWithPersona={handleStartChatWithPersona}
+            />
+          )
+        ) : (
+          <>
+            {/* 3. Luxury Hero Banner + Quick Links 12-Jewel Grid */}
+            <ColorPopHero
+              onQuickAction={(id) => {
+                if (id === 'characters') setIsCharModalOpen(true);
+                else if (id === 'lorebooks') setIsLoreModalOpen(true);
+                else if (id === 'plugins') setIsPluginModalOpen(true);
+                else if (id === 'settings') setIsSettingsOpen(true);
+                else if (id === 'gallery') setIsSceneGeneratorOpen(true);
+                else if (id === 'templates' || id === 'loreberry') setIsCharModalOpen(true);
+              }}
+              onOpenCharacterModal={() => setIsCharModalOpen(true)}
+              onOpenLorebookModal={() => setIsLoreModalOpen(true)}
+              onOpenPersonaModal={() => {
+                setActiveTab('personas');
+                setIsPersonaCreatorOpen(false);
+                setPersonaToEdit(null);
+              }}
+              onOpenChats={() => {
+                if (activeChat) setInChatMode(true);
+              }}
+              onOpenPlugins={() => setIsPluginModalOpen(true)}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+            />
 
-                {/* Sort */}
-                <div className="flex items-center space-x-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-2.5 py-1 text-xs">
-                  <ArrowUpDown className="w-3.5 h-3.5 text-[#8b949e]" />
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
-                    className="bg-transparent text-white text-xs focus:outline-none cursor-pointer"
-                  >
-                    <option value="updated" className="bg-[#161b22]">Last Updated</option>
-                    <option value="stars" className="bg-[#161b22]">Most Stars</option>
-                    <option value="name" className="bg-[#161b22]">Name</option>
-                    <option value="forks" className="bg-[#161b22]">Most Forks</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+            {/* 4. Glowing 4 Action Cards */}
+            <ActionCards
+              onCreateCharacter={() => setIsCharModalOpen(true)}
+              onCreateLorebook={() => setIsLoreModalOpen(true)}
+              onCreatePersona={() => {
+                setActiveTab('personas');
+                setIsPersonaCreatorOpen(true);
+                setPersonaToEdit(null);
+              }}
+              onOpenMyChats={() => {
+                if (activeChat) setInChatMode(true);
+              }}
+            />
 
-            {/* Repos Grid */}
-            {repos.length === 0 ? (
-              <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-12 text-center space-y-4 shadow-xl">
-                <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mx-auto text-blue-400">
-                  <BookMarked className="w-8 h-8" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-base font-bold text-white">No repositories found yet</h3>
-                  <p className="text-xs text-[#8b949e] max-w-md mx-auto">
-                    Your account <strong className="text-white">@{user?.login}</strong> is connected, but doesn't have any repositories yet.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                  <a
-                    href="https://github.com/new"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center space-x-2 px-4 py-2 bg-[#238636] hover:bg-[#2ea043] text-white text-xs font-semibold rounded-xl transition-all shadow-md"
-                  >
-                    <span>Create New Repository on GitHub</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                  <button
-                    onClick={() => loadPreviewUser('octocat')}
-                    className="inline-flex items-center space-x-2 px-4 py-2 bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] border border-[#30363d] rounded-xl text-xs font-medium transition-colors"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-                    <span>View Sample Repos (Octocat)</span>
-                  </button>
-                </div>
-              </div>
-            ) : filteredRepos.length === 0 ? (
-              <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-12 text-center text-[#8b949e] space-y-2">
-                <BookMarked className="w-8 h-8 mx-auto text-[#30363d]" />
-                <p className="text-sm font-medium text-[#c9d1d9]">No repositories match your filter</p>
-                <p className="text-xs">Try clearing the search query or selecting a different language.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredRepos.map((repo) => (
-                  <RepoCard
-                    key={repo.id}
-                    repo={repo}
-                    onOpenReadme={(r) => setReadmeRepo(r)}
-                    isGuest={isGuest}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+            {/* 5. 10 Circular Category Pills */}
+            <CategoryPills
+              activeCategory={activeCategory}
+              onSelectCategory={(cat) => {
+                setActiveCategory(cat);
+                if (cat === 'characters') setIsCharModalOpen(true);
+                if (cat === 'personas') {
+                  setActiveTab('personas');
+                  setIsPersonaCreatorOpen(false);
+                  setPersonaToEdit(null);
+                }
+                if (cat === 'lorebooks' || cat === 'locations') setIsLoreModalOpen(true);
+                if (cat === 'plugins') setIsPluginModalOpen(true);
+                if (cat === 'images') setIsSceneGeneratorOpen(true);
+                if (cat === 'favorites') setIsSavedMessagesOpen(true);
+                if (cat === 'recent') {
+                  if (activeChat) setInChatMode(true);
+                }
+                if (cat === 'wardrobe') setIsStoryNotesOpen(true);
+              }}
+            />
 
-        {/* Tab 2: Issues and Pull Requests */}
-        {activeTab === 'issues' && (
-          <IssuesList
-            issues={issues}
-            pulls={pulls}
-            repos={repos}
-            isGuest={isGuest}
-            onRefresh={() => user && fetchUserData(user.login, isGuest)}
-          />
-        )}
-
-        {/* Tab 3: Activity Feed */}
-        {activeTab === 'activity' && <ActivityFeed events={events} />}
-
-        {/* Tab 4: OAuth and Settings */}
-        {activeTab === 'settings' && (
-          <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 sm:p-8 space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-[#30363d]">
-              <div>
-                <h2 className="text-lg font-bold text-white">OAuth &amp; Connection Status</h2>
-                <p className="text-xs text-[#8b949e]">
-                  Preview environment configuration, callback routes, and credentials.
-                </p>
-              </div>
-              <button
-                onClick={() => setIsGuideOpen(true)}
-                className="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-[#58a6ff] border border-[#30363d] rounded-lg text-xs font-medium transition-colors flex items-center space-x-1.5"
-              >
-                <HelpCircle className="w-4 h-4" />
-                <span>Full Setup Walkthrough</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Development URL Card */}
-              <div className="p-4 bg-[#0d1117] rounded-xl border border-[#30363d] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5" /> Development Callback URL
-                  </span>
-                  <button
-                    onClick={() => copyUrl(devRedirectUri, 'dev-url')}
-                    className="flex items-center space-x-1 text-xs text-[#58a6ff] hover:bg-[#21262d] px-2 py-0.5 rounded transition-colors"
-                  >
-                    {copiedUrl === 'dev-url' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedUrl === 'dev-url' ? 'Copied' : 'Copy URL'}</span>
-                  </button>
-                </div>
-                <code className="block text-xs font-mono text-[#79c0ff] break-all p-2 bg-[#161b22] rounded-lg border border-[#30363d]/60">
-                  {devRedirectUri}
-                </code>
-                <p className="text-[11px] text-[#8b949e]">
-                  Register this in your GitHub OAuth App under <strong>Authorization callback URL</strong>.
-                </p>
-              </div>
-
-              {/* Shared URL Card */}
-              <div className="p-4 bg-[#0d1117] rounded-xl border border-[#30363d] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-purple-400 flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5" /> Shared / Deployed Callback URL
-                  </span>
-                  <button
-                    onClick={() => copyUrl(previewRedirectUri, 'preview-url')}
-                    className="flex items-center space-x-1 text-xs text-[#58a6ff] hover:bg-[#21262d] px-2 py-0.5 rounded transition-colors"
-                  >
-                    {copiedUrl === 'preview-url' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedUrl === 'preview-url' ? 'Copied' : 'Copy URL'}</span>
-                  </button>
-                </div>
-                <code className="block text-xs font-mono text-[#d2a8ff] break-all p-2 bg-[#161b22] rounded-lg border border-[#30363d]/60">
-                  {previewRedirectUri}
-                </code>
-                <p className="text-[11px] text-[#8b949e]">
-                  Use this when sharing or deploying the applet publicly.
-                </p>
-              </div>
-            </div>
-
-            {/* Environment Variables status */}
-            <div className="p-4 bg-[#0d1117] rounded-xl border border-[#30363d] space-y-3">
-              <h3 className="text-xs font-semibold text-white uppercase tracking-wider">
-                Environment Variables Status
-              </h3>
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between py-1 border-b border-[#30363d]/60">
-                  <span className="font-mono text-[#c9d1d9]">GITHUB_CLIENT_ID</span>
-                  <span className={`font-mono text-xs px-2 py-0.5 rounded-full ${isConfigured ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-300'}`}>
-                    {isConfigured ? 'Configured' : 'Missing in .env'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between py-1 border-b border-[#30363d]/60">
-                  <span className="font-mono text-[#c9d1d9]">GITHUB_CLIENT_SECRET</span>
-                  <span className={`font-mono text-xs px-2 py-0.5 rounded-full ${isConfigured ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-300'}`}>
-                    {isConfigured ? 'Configured' : 'Missing in .env'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Direct Connect Actions */}
-            <div className="flex items-center justify-between pt-2">
-              <button
-                onClick={() => setIsConnectOpen(true)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-colors flex items-center space-x-2"
-              >
-                <KeyRound className="w-4 h-4" />
-                <span>Connect with PAT or OAuth</span>
-              </button>
-
-              {user && (
-                <button
-                  onClick={handleLogout}
-                  className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-xs font-semibold transition-colors"
-                >
-                  Disconnect Account
-                </button>
-              )}
-            </div>
-          </div>
+            {/* 6. Recent Chats Carousel & Continue Sidebar */}
+            <RecentChatsSection
+              chats={data.chats}
+              onSelectChat={handleSelectChat}
+              onContinueLastChat={() => {
+                if (activeChat) setInChatMode(true);
+              }}
+              onGenerateSceneImage={() => setIsSceneGeneratorOpen(true)}
+              onOpenStoryNotes={() => setIsStoryNotesOpen(true)}
+              onOpenSavedMessages={() => setIsSavedMessagesOpen(true)}
+              onViewAllChats={() => {
+                if (activeChat) setInChatMode(true);
+              }}
+            />
+          </>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-[#30363d] py-6 px-4 text-center text-xs text-[#8b949e]">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <Github className="w-4 h-4 fill-current" />
-            <span>GitHub Connect &amp; Hub &bull; AI Studio Full-Stack Applet</span>
-          </div>
-          <div className="flex items-center space-x-4">
-            <button onClick={() => setIsGuideOpen(true)} className="hover:text-[#58a6ff]">
-              OAuth Setup Guide
-            </button>
-            <a
-              href="https://github.com/settings/developers"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-[#58a6ff] flex items-center gap-1"
-            >
-              GitHub Developer Portal <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-        </div>
-      </footer>
-
-      {/* Modals */}
-      <ConnectModal
-        isOpen={isConnectOpen}
-        onClose={() => setIsConnectOpen(false)}
-        onSuccess={() => fetchAuthStatus()}
-        onExploreUser={(u) => loadPreviewUser(u)}
-        onOpenGuide={() => {
-          setIsConnectOpen(false);
-          setIsGuideOpen(true);
+      {/* DUAL TRACK SCREEN OVERLAY (Pops up and slides over from both sides) */}
+      <DualTrackOverlay
+        isOpen={isDualTrackOpen}
+        onClose={() => setIsDualTrackOpen(false)} // Hitting X backs out of both sides
+        activeChat={activeChat}
+        chats={data.chats}
+        characters={data.characters}
+        personas={data.personas}
+        lorebooks={data.lorebooks}
+        plugins={data.plugins}
+        diagnostic={diagnostic}
+        openRouterConfig={data.openRouterConfig}
+        onSelectChat={handleSelectChat}
+        onOpenChatScreen={() => {
+          setIsDualTrackOpen(false);
+          if (activeChat) setInChatMode(true);
         }}
-        devRedirectUri={devRedirectUri}
-        previewRedirectUri={previewRedirectUri}
-        isConfigured={isConfigured}
+        onOpenHome={() => setIsDualTrackOpen(false)}
+        onOpenCharacterModal={() => setIsCharModalOpen(true)}
+        onOpenLorebookModal={() => setIsLoreModalOpen(true)}
+        onOpenPersonaModal={() => {
+          setIsDualTrackOpen(false);
+          setActiveTab('personas');
+          setIsPersonaCreatorOpen(false);
+          setPersonaToEdit(null);
+        }}
+        onOpenPluginModal={() => setIsPluginModalOpen(true)}
+        onOpenSettingsModal={() => setIsSettingsOpen(true)}
+        onOpenStoryNotesModal={() => setIsStoryNotesOpen(true)}
+        onOpenSavedMessagesModal={() => setIsSavedMessagesOpen(true)}
+        onOpenSceneGeneratorModal={() => setIsSceneGeneratorOpen(true)}
+        onOpenGitHubSyncModal={() => setIsGitSyncOpen(true)}
+        onTogglePlugin={handleTogglePlugin}
+        onBoostAffinity={() => {
+          if (activeChat) {
+            const updatedScore = Math.min(100, (activeChat.relationshipScore || 85) + 1);
+            handleUpdateChat({ ...activeChat, relationshipScore: updatedScore });
+          }
+        }}
       />
 
-      <OAuthGuideModal
-        isOpen={isGuideOpen}
-        onClose={() => setIsGuideOpen(false)}
-        devRedirectUri={devRedirectUri}
-        previewRedirectUri={previewRedirectUri}
+      {/* All Modal Screens Fully Connected */}
+      <CharacterModal
+        isOpen={isCharModalOpen}
+        onClose={() => setIsCharModalOpen(false)}
+        characters={data.characters}
+        onSaveCharacter={handleSaveCharacter}
+        onStartChatWithCharacter={handleStartChatWithCharacter}
       />
 
-      <ReadmeModal
-        repo={readmeRepo}
-        onClose={() => setReadmeRepo(null)}
+      <LorebookModal
+        isOpen={isLoreModalOpen}
+        onClose={() => setIsLoreModalOpen(false)}
+        lorebooks={data.lorebooks}
+        onSaveLorebook={handleSaveLorebook}
       />
+
+      <PersonaModal
+        isOpen={isPersonaModalOpen}
+        onClose={() => setIsPersonaModalOpen(false)}
+        personas={data.personas}
+        onSavePersona={handleSavePersona}
+        onSelectDefaultPersona={(pId) => {
+          const updated = data.personas.map((p) => ({ ...p, is_default: p.id === pId }));
+          updateData({ ...data, personas: updated });
+        }}
+      />
+
+      <PluginModal
+        isOpen={isPluginModalOpen}
+        onClose={() => setIsPluginModalOpen(false)}
+        plugins={data.plugins}
+        onTogglePlugin={handleTogglePlugin}
+        onSavePlugin={(p) => updateData({ ...data, plugins: [...data.plugins, p] })}
+      />
+
+      <OpenRouterSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        config={data.openRouterConfig}
+        onSaveConfig={handleSaveOpenRouterConfig}
+        diagnostic={diagnostic}
+        onTestConnection={testOpenRouter}
+        supabaseConfig={data.supabaseConfig}
+        onSaveSupabaseConfig={handleSaveSupabaseConfig}
+        firebaseUser={firebaseUser}
+      />
+
+      <StoryNotesModal
+        isOpen={isStoryNotesOpen}
+        onClose={() => setIsStoryNotesOpen(false)}
+        memories={data.storyMemories || []}
+        chats={data.chats}
+        activeChatId={activeChat?.id}
+        onSaveMemory={handleSaveMemory}
+        onDeleteMemory={handleDeleteMemory}
+        onOpenChat={handleSelectChat}
+      />
+
+      <SavedMessagesModal
+        isOpen={isSavedMessagesOpen}
+        onClose={() => setIsSavedMessagesOpen(false)}
+        savedMessages={data.savedMessages || []}
+        chats={data.chats}
+        onRemoveSavedMessage={handleRemoveSavedMessage}
+        onOpenChat={handleSelectChat}
+      />
+
+      <SceneGeneratorModal
+        isOpen={isSceneGeneratorOpen}
+        onClose={() => setIsSceneGeneratorOpen(false)}
+        chats={data.chats}
+        activeChatId={activeChat?.id}
+        onApplySceneBackground={handleApplySceneBackground}
+      />
+
+      <GitHubSyncModal isOpen={isGitSyncOpen} onClose={() => setIsGitSyncOpen(false)} />
     </div>
   );
 }
