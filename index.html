@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub Connect &amp; Hub</title>
+    <meta name="description" content="Connect to your GitHub account to explore repositories, pull requests, issues, commits, profile activity, and manage your GitHub projects seamlessly." />
+    <meta property="og:title" content="GitHub Connect &amp; Hub" />
+    <meta property="og:description" content="Connect to your GitHub account to explore repositories, pull requests, issues, commits, profile activity, and manage your GitHub projects seamlessly." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // Suppress Vite HMR WebSocket disconnects in iframe preview environment per runtime instructions
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event && event.reason && (
+          String(event.reason).includes('WebSocket') ||
+          (event.reason.message && String(event.reason.message).includes('WebSocket'))
+        )) {
+          event.preventDefault();
+        }
+      });
+      window.addEventListener('error', function(event) {
+        if (event && event.message && String(event.message).includes('WebSocket')) {
+          event.preventDefault();
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

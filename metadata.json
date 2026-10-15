@@ -1,0 +1,6 @@
+{
+  "name": "GitHub Connect & Hub",
+  "description": "Connect to your GitHub account to explore repositories, pull requests, issues, commits, profile activity, and manage your GitHub projects seamlessly.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
