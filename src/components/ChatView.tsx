@@ -36,6 +36,8 @@ import {
   ChevronRight,
   GitBranch,
   Check,
+  Share2,
+  Home,
 } from 'lucide-react';
 import {
   Chat,
@@ -76,6 +78,10 @@ interface ChatViewProps {
   onDeleteChat?: (chatId: string) => void;
   onImportChat?: (newChat: Chat) => void;
   onBranchChat?: (fromMsgId: string, branchTitle: string) => void;
+  onOpenRelationshipMap?: () => void;
+  onOpenWorldMemory?: () => void;
+  onOpenSocialSimulator?: () => void;
+  onOpenGallery?: (album?: string) => void;
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
@@ -103,6 +109,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
   onBookmarkMessage,
   onDeleteChat,
   onImportChat,
+  onBranchChat,
+  onOpenRelationshipMap,
+  onOpenWorldMemory,
+  onOpenSocialSimulator,
+  onOpenGallery,
 }) => {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -111,6 +122,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [editContent, setEditContent] = useState('');
   const [diceResult, setDiceResult] = useState<string | null>(null);
   const [savedSuccessMsg, setSavedSuccessMsg] = useState<string | null>(null);
+
+  // Interactive Chat Controls State (Edit, Delete, Regenerate, Continue, Swipe, Rewind, Pin, Branch)
+  const [branchingMsgId, setBranchingMsgId] = useState<string | null>(null);
+  const [branchTitleInput, setBranchTitleInput] = useState('');
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [rewindingMsgId, setRewindingMsgId] = useState<string | null>(null);
+  const [showRewindModal, setShowRewindModal] = useState(false);
+  const [showPinnedBar, setShowPinnedBar] = useState(false);
+  const [regeneratingMsgId, setRegeneratingMsgId] = useState<string | null>(null);
+  const [continuingMsgId, setContinuingMsgId] = useState<string | null>(null);
 
   // Text-To-Speech (TTS) System
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
@@ -298,6 +319,245 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
     };
   }, []);
+
+  // =========================================================================
+  // INTERACTIVE CHAT CONTROLS: 8 POWER FEATURES
+  // =========================================================================
+
+  // 1. EDIT MESSAGE
+  const handleStartEdit = (msg: ChatMessage) => {
+    setEditingMsgId(msg.id);
+    setEditContent(msg.content);
+  };
+
+  const handleSaveEdit = (msgId: string) => {
+    const updated = chat.messages.map((m) => {
+      if (m.id !== msgId) return m;
+      const updatedSwipes = m.swipes && m.swipes.length > 0 ? [...m.swipes] : [m.content];
+      const curIdx = m.currentSwipeIndex ?? 0;
+      if (updatedSwipes[curIdx] !== undefined) {
+        updatedSwipes[curIdx] = editContent;
+      }
+      return {
+        ...m,
+        content: editContent,
+        swipes: updatedSwipes,
+      };
+    });
+    onUpdateChat({ ...chat, messages: updated, updatedAt: new Date().toISOString() });
+    setEditingMsgId(null);
+    setEditContent('');
+    setSavedSuccessMsg('Message edited successfully!');
+    setTimeout(() => setSavedSuccessMsg(null), 2000);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMsgId(null);
+    setEditContent('');
+  };
+
+  // 2. DELETE MESSAGE
+  const handleDeleteMessage = (msgId: string) => {
+    const updated = chat.messages.filter((m) => m.id !== msgId);
+    onUpdateChat({ ...chat, messages: updated, updatedAt: new Date().toISOString() });
+    setSavedSuccessMsg('Deleted message from story.');
+    setTimeout(() => setSavedSuccessMsg(null), 2000);
+  };
+
+  // 3. PIN / UNPIN MESSAGE
+  const handleTogglePin = (msgId: string) => {
+    const updated = chat.messages.map((m) =>
+      m.id === msgId ? { ...m, isPinned: !m.isPinned } : m
+    );
+    const target = updated.find((m) => m.id === msgId);
+    onUpdateChat({ ...chat, messages: updated, updatedAt: new Date().toISOString() });
+    setSavedSuccessMsg(target?.isPinned ? '★ Pinned message to key memories!' : 'Unpinned message');
+    setTimeout(() => setSavedSuccessMsg(null), 2000);
+  };
+
+  // 4. SWIPE ALTERNATIVE REPLIES
+  const handleSwipe = (msgId: string, direction: 'prev' | 'next') => {
+    const updated = chat.messages.map((m) => {
+      if (m.id !== msgId || !m.swipes || m.swipes.length <= 1) return m;
+      const curIdx = m.currentSwipeIndex ?? 0;
+      const nextIdx =
+        direction === 'next'
+          ? (curIdx + 1) % m.swipes.length
+          : (curIdx - 1 + m.swipes.length) % m.swipes.length;
+      return {
+        ...m,
+        currentSwipeIndex: nextIdx,
+        content: m.swipes[nextIdx],
+      };
+    });
+    onUpdateChat({ ...chat, messages: updated, updatedAt: new Date().toISOString() });
+  };
+
+  // 5. REGENERATE (Creates a new swipe variation)
+  const handleRegenerate = async (msgId: string) => {
+    const targetIdx = chat.messages.findIndex((m) => m.id === msgId);
+    if (targetIdx === -1 || loading) return;
+
+    setRegeneratingMsgId(msgId);
+    setLoading(true);
+
+    try {
+      const historyBefore = chat.messages.slice(0, targetIdx);
+      const tempChat: Chat = { ...chat, messages: historyBefore };
+      const apiMessages = buildOpenRouterMessages({
+        characters: activeCharacters,
+        persona: activePersona,
+        lorebooks: activeLorebooks,
+        plugins: activePlugins,
+        chat: tempChat,
+      });
+
+      const response = await fetch('/api/openrouter/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: openRouterConfig.apiKey,
+          model: openRouterConfig.model,
+          messages: apiMessages,
+          temperature: openRouterConfig.temperature,
+          maxTokens: openRouterConfig.maxTokens,
+          topP: openRouterConfig.topP,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to regenerate reply');
+
+      const newReply = data.content || '...';
+      const updated = chat.messages.map((m, idx) => {
+        if (idx !== targetIdx) return m;
+        const currentSwipes = m.swipes && m.swipes.length > 0 ? m.swipes : [m.content];
+        const newSwipes = [...currentSwipes, newReply];
+        return {
+          ...m,
+          swipes: newSwipes,
+          currentSwipeIndex: newSwipes.length - 1,
+          content: newReply,
+          timestamp: Date.now(),
+        };
+      });
+
+      onUpdateChat({ ...chat, messages: updated, updatedAt: new Date().toISOString() });
+      setSavedSuccessMsg(`Regenerated alternative reply! (${(updated[targetIdx].swipes?.length || 1)} alternatives available)`);
+      setTimeout(() => setSavedSuccessMsg(null), 2500);
+
+      if (autoTTS) {
+        speakMessage(msgId, newReply);
+      }
+    } catch (err: any) {
+      setErrorDetails({
+        message: err.message || 'Could not regenerate message.',
+        suggestedFix: 'Check connection or model credits in Settings.',
+      });
+    } finally {
+      setLoading(false);
+      setRegeneratingMsgId(null);
+    }
+  };
+
+  // 6. CONTINUE (Expand current message)
+  const handleContinue = async (msgId: string) => {
+    const targetIdx = chat.messages.findIndex((m) => m.id === msgId);
+    if (targetIdx === -1 || loading) return;
+
+    setContinuingMsgId(msgId);
+    setLoading(true);
+
+    try {
+      const historyUpTo = chat.messages.slice(0, targetIdx + 1);
+      const tempChat: Chat = { ...chat, messages: historyUpTo };
+      const apiMessages = buildOpenRouterMessages({
+        characters: activeCharacters,
+        persona: activePersona,
+        lorebooks: activeLorebooks,
+        plugins: activePlugins,
+        chat: tempChat,
+      });
+
+      apiMessages.push({
+        role: 'system',
+        content: `[Instruction: Continue your last response seamlessly from exactly where you left off. Expand on thoughts, emotions, actions, and dialogue without repeating yourself.]`,
+      });
+
+      const response = await fetch('/api/openrouter/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: openRouterConfig.apiKey,
+          model: openRouterConfig.model,
+          messages: apiMessages,
+          temperature: openRouterConfig.temperature,
+          maxTokens: openRouterConfig.maxTokens,
+          topP: openRouterConfig.topP,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to continue text');
+
+      const continuation = data.content ? `\n\n${data.content}` : '';
+      const updated = chat.messages.map((m, idx) => {
+        if (idx !== targetIdx) return m;
+        const expandedContent = m.content + continuation;
+        const updatedSwipes = m.swipes && m.swipes.length > 0 ? [...m.swipes] : [m.content];
+        const curIdx = m.currentSwipeIndex ?? 0;
+        updatedSwipes[curIdx] = expandedContent;
+        return {
+          ...m,
+          content: expandedContent,
+          swipes: updatedSwipes,
+        };
+      });
+
+      onUpdateChat({ ...chat, messages: updated, updatedAt: new Date().toISOString() });
+      setSavedSuccessMsg('Continued story prose seamlessly!');
+      setTimeout(() => setSavedSuccessMsg(null), 2500);
+
+      if (autoTTS && data.content) {
+        speakMessage(msgId, data.content);
+      }
+    } catch (err: any) {
+      setErrorDetails({
+        message: err.message || 'Could not continue message.',
+        suggestedFix: 'Check connection or model credits in Settings.',
+      });
+    } finally {
+      setLoading(false);
+      setContinuingMsgId(null);
+    }
+  };
+
+  // 7. REWIND TO EARLIER MESSAGE
+  const handleConfirmRewind = () => {
+    if (!rewindingMsgId) return;
+    const targetIdx = chat.messages.findIndex((m) => m.id === rewindingMsgId);
+    if (targetIdx === -1) return;
+    const truncated = chat.messages.slice(0, targetIdx + 1);
+    onUpdateChat({ ...chat, messages: truncated, updatedAt: new Date().toISOString() });
+    setShowRewindModal(false);
+    setRewindingMsgId(null);
+    setSavedSuccessMsg('Rewound conversation to this message!');
+    setTimeout(() => setSavedSuccessMsg(null), 2500);
+  };
+
+  // 8. BRANCH INTO ALTERNATE TIMELINE
+  const handleConfirmBranch = () => {
+    if (!branchingMsgId) return;
+    const title = branchTitleInput.trim() || `${chat.title} (Branch ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
+    if (onBranchChat) {
+      onBranchChat(branchingMsgId, title);
+    }
+    setShowBranchModal(false);
+    setBranchingMsgId(null);
+    setBranchTitleInput('');
+    setSavedSuccessMsg(`Branched story timeline: "${title}"`);
+    setTimeout(() => setSavedSuccessMsg(null), 3000);
+  };
 
   // Condense past messages to reduce token consumption while preserving story context
   const handleCondenseHistory = () => {
@@ -552,6 +812,50 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </button>
           )}
 
+          {/* Living Relationship Map */}
+          {onOpenRelationshipMap && (
+            <button
+              onClick={onOpenRelationshipMap}
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-pink-300 transition-colors"
+              title="Living Relationship Map (3D Interactive Web: Friendships, Marriages, Affairs, Jealousy)"
+            >
+              <Heart className="w-4 h-4 text-pink-400 fill-pink-500/20" />
+            </button>
+          )}
+
+          {/* Interactive World and House Memory */}
+          {onOpenWorldMemory && (
+            <button
+              onClick={onOpenWorldMemory}
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-emerald-300 transition-colors"
+              title="Interactive World & House Memory (Mansions, Rooms, Belongings, Past Events)"
+            >
+              <Home className="w-4 h-4 text-emerald-400" />
+            </button>
+          )}
+
+          {/* Fictional Social Media Simulator */}
+          {onOpenSocialSimulator && (
+            <button
+              onClick={onOpenSocialSimulator}
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-purple-300 transition-colors"
+              title="Fictional Social Media Simulator (NPC Posts, Stories, DMs, Trending Gossip)"
+            >
+              <Share2 className="w-4 h-4 text-purple-400" />
+            </button>
+          )}
+
+          {/* Gallery Showcase Album */}
+          {onOpenGallery && (
+            <button
+              onClick={() => onOpenGallery('showcase')}
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-amber-300 transition-colors"
+              title="Showcase Image Gallery Album"
+            >
+              <ImageIcon className="w-4 h-4 text-amber-400" />
+            </button>
+          )}
+
           {/* Scene Background Button */}
           <button
             onClick={onOpenSceneGeneratorModal}
@@ -647,8 +951,57 @@ export const ChatView: React.FC<ChatViewProps> = ({
         }}
         className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 relative z-10"
       >
+        {/* Pinned Key Lore & Memories Accordion Banner */}
+        {chat.messages.some((m) => m.isPinned) && (
+          <div className="mb-4 bg-gradient-to-r from-amber-950/50 via-[#1e0719]/90 to-amber-950/50 border border-amber-500/50 rounded-2xl p-3 shadow-[0_0_20px_rgba(245,158,11,0.25)] backdrop-blur-md animate-in fade-in">
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowPinnedBar(!showPinnedBar);
+              }}
+              className="flex items-center justify-between cursor-pointer select-none"
+            >
+              <div className="flex items-center space-x-2 text-xs font-bold text-amber-300">
+                <Pin className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
+                <span>Pinned Story Memories & Lore ({chat.messages.filter((m) => m.isPinned).length})</span>
+              </div>
+              <span className="text-[10px] text-amber-300/80 font-mono px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30">
+                {showPinnedBar ? 'Hide' : 'Expand'}
+              </span>
+            </div>
+
+            {showPinnedBar && (
+              <div className="mt-2.5 space-y-2 border-t border-amber-500/30 pt-2.5 max-h-48 overflow-y-auto pr-1">
+                {chat.messages
+                  .filter((m) => m.isPinned)
+                  .map((pinnedMsg) => (
+                    <div
+                      key={pinnedMsg.id}
+                      className="p-2.5 rounded-xl bg-black/40 border border-amber-500/25 text-xs text-amber-100 flex items-start justify-between gap-2.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <strong className="text-amber-300">{pinnedMsg.senderName}:</strong>{' '}
+                        <span className="line-clamp-2 text-amber-100/90">{pinnedMsg.content}</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePin(pinnedMsg.id);
+                        }}
+                        className="text-[10px] text-amber-400 hover:text-white hover:underline shrink-0 font-semibold"
+                      >
+                        Unpin
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {chat.messages.map((msg) => {
           const isUser = msg.senderId === 'user';
+          const isEditing = editingMsgId === msg.id;
 
           return (
             <div
@@ -664,17 +1017,27 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 className="w-10 h-10 rounded-2xl object-cover ring-2 ring-[#ff3399]/50 shadow-md shrink-0"
               />
 
-              {/* Message Bubble */}
+              {/* Message Bubble Card */}
               <div
-                className={`relative rounded-2xl p-4 shadow-xl text-xs sm:text-sm leading-relaxed group ${
+                className={`relative rounded-2xl p-4 shadow-xl text-xs sm:text-sm leading-relaxed group transition-all ${
                   isUser
                     ? 'bg-gradient-to-br from-[#ff007f] to-[#ff3399] text-white rounded-tr-none shadow-[0_0_20px_rgba(255,0,128,0.4)]'
                     : 'bg-[#1b0516]/95 border border-[#ff3399]/40 text-[#ffd6eb] rounded-tl-none shadow-[0_0_20px_rgba(255,51,153,0.25)] backdrop-blur-sm'
                 }`}
               >
-                {/* Sender Name + Quick Save Action */}
+                {/* Header: Sender Name, Pin Badge, Speaking Indicator, Timestamp */}
                 <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/10 text-[10px] font-bold">
-                  <span className={isUser ? 'text-white' : 'text-[#ff99cc]'}>{msg.senderName}</span>
+                  <div className="flex items-center space-x-2">
+                    <span className={isUser ? 'text-white' : 'text-[#ff99cc]'}>{msg.senderName}</span>
+
+                    {/* Golden Pin Badge */}
+                    {msg.isPinned && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/40 text-[9px] flex items-center gap-1 font-semibold">
+                        <Pin className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
+                        <span>Pinned</span>
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex items-center space-x-2">
                     {/* Speaking Active Indicator */}
@@ -712,22 +1075,216 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         minute: '2-digit',
                       })}
                     </span>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSaveQuote(msg);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-emerald-300 transition-opacity"
-                      title="Bookmark this quote to Saved Messages"
-                    >
-                      <Bookmark className="w-3 h-3" />
-                    </button>
                   </div>
                 </div>
 
-                {/* Content */}
-                <div className="whitespace-pre-wrap font-sans select-text">{msg.content}</div>
+                {/* Body Content / Inline Edit Mode */}
+                {isEditing ? (
+                  <div className="space-y-2 mt-1 animate-in fade-in">
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="w-full bg-[#12030f] border-2 border-[#ff007f]/70 rounded-xl p-3 text-xs sm:text-sm text-white focus:outline-none focus:border-[#ff3399] resize-y min-h-[90px] shadow-inner"
+                      placeholder="Edit message..."
+                    />
+                    <div className="flex items-center justify-end space-x-2">
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        className="px-3 py-1 bg-white/10 hover:bg-white/20 text-xs rounded-lg font-bold transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveEdit(msg.id)}
+                        className="px-3.5 py-1 bg-[#ff007f] hover:bg-[#ff1a8c] text-white text-xs rounded-lg font-bold flex items-center space-x-1 shadow-[0_0_12px_rgba(255,0,128,0.6)] transition-all"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Save Edit</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap font-sans select-text leading-relaxed">
+                    {msg.content}
+                  </div>
+                )}
+
+                {/* ========================================================================= */}
+                {/* 8 INTERACTIVE CONTROLS TOOLBAR: Edit, Delete, Regenerate, Continue,       */}
+                {/* Swiping Alternative Replies, Rewind, Pin, Branch Timeline                 */}
+                {/* ========================================================================= */}
+                {!isEditing && (
+                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-white/10 text-[11px] opacity-75 group-hover:opacity-100 transition-opacity">
+                    {/* Left: Alternative Reply Swiper (< 1/3 >) */}
+                    <div className="flex items-center space-x-1">
+                      {msg.swipes && msg.swipes.length > 1 && (
+                        <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/20 text-[10px] font-mono text-[#ffd6eb] shadow-sm">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSwipe(msg.id, 'prev');
+                            }}
+                            className="hover:text-white p-0.5 rounded hover:bg-white/10 transition-colors"
+                            title="Previous alternative reply"
+                          >
+                            <ChevronLeft className="w-3 h-3" />
+                          </button>
+                          <span className="font-semibold">
+                            {(msg.currentSwipeIndex ?? 0) + 1}/{msg.swipes.length}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSwipe(msg.id, 'next');
+                            }}
+                            className="hover:text-white p-0.5 rounded hover:bg-white/10 transition-colors"
+                            title="Next alternative reply"
+                          >
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right: Message Actions */}
+                    <div className="flex items-center space-x-1 sm:space-x-1.5 ml-auto">
+                      {/* Pin Message */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePin(msg.id);
+                        }}
+                        className={`p-1 rounded-lg transition-all ${
+                          msg.isPinned
+                            ? 'text-amber-300 bg-amber-500/25 border border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
+                            : 'text-white/60 hover:text-amber-300 hover:bg-white/10'
+                        }`}
+                        title={msg.isPinned ? 'Unpin message' : 'Pin message as key story lore'}
+                      >
+                        <Pin className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Edit Message */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEdit(msg);
+                        }}
+                        className="p-1 rounded-lg text-white/60 hover:text-[#ff99cc] hover:bg-white/10 transition-colors"
+                        title="Edit message"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Character Message Actions: Regenerate & Continue */}
+                      {!isUser && (
+                        <>
+                          {/* Regenerate (Alternative Reply Swipe) */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRegenerate(msg.id);
+                            }}
+                            disabled={loading}
+                            className="p-1 rounded-lg text-white/60 hover:text-cyan-300 hover:bg-white/10 transition-colors disabled:opacity-30"
+                            title="Regenerate alternative reply from AI (Adds swipe variation)"
+                          >
+                            <RefreshCw
+                              className={`w-3.5 h-3.5 ${
+                                regeneratingMsgId === msg.id ? 'animate-spin text-cyan-400' : ''
+                              }`}
+                            />
+                          </button>
+
+                          {/* Continue Story Prose */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleContinue(msg.id);
+                            }}
+                            disabled={loading}
+                            className="p-1 rounded-lg text-white/60 hover:text-emerald-300 hover:bg-white/10 transition-colors disabled:opacity-30"
+                            title="Continue: Expand story from this message"
+                          >
+                            <Play
+                              className={`w-3.5 h-3.5 ${
+                                continuingMsgId === msg.id ? 'animate-pulse text-emerald-400' : ''
+                              }`}
+                            />
+                          </button>
+                        </>
+                      )}
+
+                      {/* Rewind to this message */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRewindingMsgId(msg.id);
+                          setShowRewindModal(true);
+                        }}
+                        className="p-1 rounded-lg text-white/60 hover:text-amber-400 hover:bg-white/10 transition-colors"
+                        title="Rewind conversation to this message"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Branch Timeline */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBranchingMsgId(msg.id);
+                          setBranchTitleInput(
+                            `${chat.title} (Branch ${new Date().toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })})`
+                          );
+                          setShowBranchModal(true);
+                        }}
+                        className="p-1 rounded-lg text-white/60 hover:text-purple-300 hover:bg-white/10 transition-colors"
+                        title="Branch into alternate timeline from here"
+                      >
+                        <GitBranch className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Bookmark to Saved Messages */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSaveQuote(msg);
+                        }}
+                        className="p-1 rounded-lg text-white/60 hover:text-emerald-300 hover:bg-white/10 transition-colors"
+                        title="Bookmark to Saved Quotes"
+                      >
+                        <Bookmark className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Delete Message */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMessage(msg.id);
+                        }}
+                        className="p-1 rounded-lg text-white/60 hover:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                        title="Delete this message"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -1051,6 +1608,88 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 className="px-5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold text-xs shadow-[0_0_15px_rgba(225,29,72,0.8)]"
               >
                 Delete Chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Branch Timeline Modal */}
+      {showBranchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-md bg-[#160314] border-2 border-purple-500/60 rounded-3xl p-6 shadow-[0_0_40px_rgba(168,85,247,0.5)] space-y-4 text-[#ffd6eb]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-purple-300">
+                <GitBranch className="w-5 h-5 text-purple-400" />
+                <h3 className="text-lg font-bold text-white">Branch Into Alternate Timeline</h3>
+              </div>
+              <button onClick={() => setShowBranchModal(false)} className="text-white/60 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[#ffd6eb]/80 leading-relaxed">
+              Create a parallel reality starting from this exact message. All previous story beats and memories are preserved, allowing you to explore alternate outcomes without losing your existing story!
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-purple-300 uppercase tracking-wider">
+                New Branch Title
+              </label>
+              <input
+                type="text"
+                value={branchTitleInput}
+                onChange={(e) => setBranchTitleInput(e.target.value)}
+                placeholder="e.g. Lucious Secrets Exposed (Branch B)"
+                className="w-full bg-[#20051b] border border-purple-500/40 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-purple-400 shadow-inner"
+              />
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setShowBranchModal(false)}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-xs font-bold rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmBranch}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.7)] flex items-center space-x-1.5"
+              >
+                <GitBranch className="w-4 h-4" />
+                <span>Fork Timeline</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rewind Confirmation Modal */}
+      {showRewindModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-sm bg-[#160312] border-2 border-amber-500/60 rounded-3xl p-6 shadow-[0_0_40px_rgba(245,158,11,0.5)] space-y-4 text-[#ffd6eb]">
+            <div className="flex items-center space-x-2 text-amber-300 font-bold">
+              <RotateCcw className="w-5 h-5 text-amber-400" />
+              <h3 className="text-lg text-white font-bold">Rewind Story?</h3>
+            </div>
+
+            <p className="text-xs text-[#ffd6eb]/80 leading-relaxed">
+              Are you sure you want to rewind the conversation to this point? All subsequent messages will be erased so you can choose a different path.
+            </p>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setShowRewindModal(false)}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-xs font-bold rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRewind}
+                className="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.7)] flex items-center space-x-1.5"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Rewind Story</span>
               </button>
             </div>
           </div>

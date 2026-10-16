@@ -59,6 +59,10 @@ interface DualTrackOverlayProps {
   onOpenGitHubSyncModal: () => void;
   onTogglePlugin: (pluginId: string) => void;
   onBoostAffinity?: () => void;
+  onOpenRelationshipMap?: () => void;
+  onOpenWorldMemory?: () => void;
+  onOpenSocialSimulator?: () => void;
+  onOpenGallery?: (album?: string) => void;
 }
 
 export const DualTrackOverlay: React.FC<DualTrackOverlayProps> = ({
@@ -86,6 +90,10 @@ export const DualTrackOverlay: React.FC<DualTrackOverlayProps> = ({
   onOpenGitHubSyncModal,
   onTogglePlugin,
   onBoostAffinity,
+  onOpenRelationshipMap,
+  onOpenWorldMemory,
+  onOpenSocialSimulator,
+  onOpenGallery,
 }) => {
   const [diceResult, setDiceResult] = useState<string | null>(null);
   const [quickNote, setQuickNote] = useState('');

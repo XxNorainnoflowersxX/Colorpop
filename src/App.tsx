@@ -21,6 +21,10 @@ import { OpenRouterSettingsModal } from './components/OpenRouterSettingsModal';
 import { StoryNotesModal } from './components/StoryNotesModal';
 import { SavedMessagesModal } from './components/SavedMessagesModal';
 import { SceneGeneratorModal } from './components/SceneGeneratorModal';
+import { GalleryModal } from './components/GalleryModal';
+import { RelationshipMapModal } from './components/RelationshipMapModal';
+import { WorldMemoryModal } from './components/WorldMemoryModal';
+import { SocialSimulatorModal } from './components/SocialSimulatorModal';
 import { GitHubSyncModal } from './components/GitHubSyncModal';
 import { DualTrackOverlay } from './components/DualTrackOverlay';
 import { Columns, Sparkles } from 'lucide-react';
@@ -36,6 +40,12 @@ import {
   ConnectionDiagnostic,
   SupabaseConfig,
   StoryMemory,
+  GalleryImage,
+  RelationshipEdge,
+  WorldLocation,
+  SocialMediaPost,
+  SocialStory,
+  SocialDM,
 } from './types/roleplay';
 import {
   loadLocalData,
@@ -64,6 +74,11 @@ export default function App() {
   const [isSavedMessagesOpen, setIsSavedMessagesOpen] = useState(false);
   const [isSceneGeneratorOpen, setIsSceneGeneratorOpen] = useState(false);
   const [isGitSyncOpen, setIsGitSyncOpen] = useState(false);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [galleryInitialAlbum, setGalleryInitialAlbum] = useState<string>('showcase');
+  const [isRelationshipMapOpen, setIsRelationshipMapOpen] = useState(false);
+  const [isWorldMemoryOpen, setIsWorldMemoryOpen] = useState(false);
+  const [isSocialSimulatorOpen, setIsSocialSimulatorOpen] = useState(false);
 
   // Persona Page & Creator Mode
   const [isPersonaCreatorOpen, setIsPersonaCreatorOpen] = useState(false);
@@ -338,6 +353,67 @@ export default function App() {
     updateData({ ...data, chats: updatedChats });
   };
 
+  // Delete Chat Handler
+  const handleDeleteChat = (chatId: string) => {
+    const remainingChats = data.chats.filter((c) => c.id !== chatId);
+    const nextActive = remainingChats.length > 0 ? remainingChats[0] : null;
+    updateData({ ...data, chats: remainingChats, activeChatId: nextActive?.id });
+    setActiveChat(nextActive);
+    if (!nextActive) {
+      setInChatMode(false);
+    }
+  };
+
+  // Branch Story into Alternate Timeline
+  const handleBranchChat = (fromMsgId: string, branchTitle?: string) => {
+    if (!activeChat) return;
+    const msgIdx = activeChat.messages.findIndex((m) => m.id === fromMsgId);
+    const branchedMessages =
+      msgIdx >= 0 ? activeChat.messages.slice(0, msgIdx + 1) : [...activeChat.messages];
+    const newChatId = `chat_branch_${Date.now()}`;
+    const newBranch: Chat = {
+      ...activeChat,
+      id: newChatId,
+      title: branchTitle || `${activeChat.title} (Timeline B)`,
+      messages: branchedMessages,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const updatedChats = [newBranch, ...data.chats];
+    updateData({ ...data, chats: updatedChats, activeChatId: newChatId });
+    setActiveChat(newBranch);
+  };
+
+  // Gallery Handlers
+  const handleAddGalleryImage = (image: GalleryImage) => {
+    const updated = [image, ...(data.galleryImages || [])];
+    updateData({ ...data, galleryImages: updated });
+  };
+
+  const handleDeleteGalleryImage = (imageId: string) => {
+    const updated = (data.galleryImages || []).filter((img) => img.id !== imageId);
+    updateData({ ...data, galleryImages: updated });
+  };
+
+  // Relationship Map Handlers
+  const handleUpdateRelationships = (updated: RelationshipEdge[]) => {
+    updateData({ ...data, relationshipEdges: updated });
+  };
+
+  // World Memory Handlers
+  const handleUpdateWorldLocations = (updated: WorldLocation[]) => {
+    updateData({ ...data, worldLocations: updated });
+  };
+
+  // Social Media Simulator Handlers
+  const handleUpdateSocialPosts = (updated: SocialMediaPost[]) => {
+    updateData({ ...data, socialPosts: updated });
+  };
+
+  const handleUpdateSocialDMs = (updated: SocialDM[]) => {
+    updateData({ ...data, socialDMs: updated });
+  };
+
   // If in Chat Mode, render full-scale Roleplay Chat with dual track integration
   if (inChatMode && activeChat) {
     return (
@@ -365,6 +441,15 @@ export default function App() {
           onOpenGitHubSyncModal={() => setIsGitSyncOpen(true)}
           onTogglePlugin={handleTogglePlugin}
           onBookmarkMessage={handleBookmarkMessage}
+          onDeleteChat={handleDeleteChat}
+          onBranchChat={handleBranchChat}
+          onOpenRelationshipMap={() => setIsRelationshipMapOpen(true)}
+          onOpenWorldMemory={() => setIsWorldMemoryOpen(true)}
+          onOpenSocialSimulator={() => setIsSocialSimulatorOpen(true)}
+          onOpenGallery={(album) => {
+            setGalleryInitialAlbum(album || 'showcase');
+            setIsGalleryOpen(true);
+          }}
         />
 
         {/* Global Modals (Accessible from Chat View) */}
@@ -435,6 +520,55 @@ export default function App() {
           onApplySceneBackground={handleApplySceneBackground}
         />
         <GitHubSyncModal isOpen={isGitSyncOpen} onClose={() => setIsGitSyncOpen(false)} />
+
+        <GalleryModal
+          isOpen={isGalleryOpen}
+          onClose={() => setIsGalleryOpen(false)}
+          galleryImages={data.galleryImages || []}
+          onAddImage={handleAddGalleryImage}
+          onDeleteImage={handleDeleteGalleryImage}
+          onSelectChatBackground={(bgUrl) => {
+            if (activeChat) {
+              handleApplySceneBackground(activeChat.id, bgUrl);
+            }
+          }}
+          initialAlbum={galleryInitialAlbum}
+        />
+
+        <RelationshipMapModal
+          isOpen={isRelationshipMapOpen}
+          onClose={() => setIsRelationshipMapOpen(false)}
+          characters={data.characters}
+          personas={data.personas}
+          relationships={data.relationshipEdges || []}
+          onUpdateRelationships={handleUpdateRelationships}
+        />
+
+        <WorldMemoryModal
+          isOpen={isWorldMemoryOpen}
+          onClose={() => setIsWorldMemoryOpen(false)}
+          locations={data.worldLocations || []}
+          characters={data.characters}
+          personas={data.personas}
+          onUpdateLocations={handleUpdateWorldLocations}
+          onSetChatScene={(bgUrl) => {
+            if (activeChat) {
+              handleApplySceneBackground(activeChat.id, bgUrl);
+            }
+          }}
+        />
+
+        <SocialSimulatorModal
+          isOpen={isSocialSimulatorOpen}
+          onClose={() => setIsSocialSimulatorOpen(false)}
+          posts={data.socialPosts || []}
+          stories={data.socialStories || []}
+          dms={data.socialDMs || []}
+          characters={data.characters}
+          personas={data.personas}
+          onUpdatePosts={handleUpdateSocialPosts}
+          onUpdateDMs={handleUpdateSocialDMs}
+        />
       </>
     );
   }
@@ -525,12 +659,23 @@ export default function App() {
           <>
             {/* 3. Luxury Hero Banner + Quick Links 12-Jewel Grid */}
             <ColorPopHero
+              galleryImages={data.galleryImages || []}
+              onOpenGallery={(album) => {
+                setGalleryInitialAlbum(album || 'showcase');
+                setIsGalleryOpen(true);
+              }}
               onQuickAction={(id) => {
                 if (id === 'characters') setIsCharModalOpen(true);
                 else if (id === 'lorebooks') setIsLoreModalOpen(true);
                 else if (id === 'plugins') setIsPluginModalOpen(true);
                 else if (id === 'settings') setIsSettingsOpen(true);
-                else if (id === 'gallery') setIsSceneGeneratorOpen(true);
+                else if (id === 'gallery') {
+                  setGalleryInitialAlbum('showcase');
+                  setIsGalleryOpen(true);
+                }
+                else if (id === 'relationships') setIsRelationshipMapOpen(true);
+                else if (id === 'world') setIsWorldMemoryOpen(true);
+                else if (id === 'social') setIsSocialSimulatorOpen(true);
                 else if (id === 'templates' || id === 'loreberry') setIsCharModalOpen(true);
               }}
               onOpenCharacterModal={() => setIsCharModalOpen(true)}
@@ -718,6 +863,55 @@ export default function App() {
       />
 
       <GitHubSyncModal isOpen={isGitSyncOpen} onClose={() => setIsGitSyncOpen(false)} />
+
+      <GalleryModal
+        isOpen={isGalleryOpen}
+        onClose={() => setIsGalleryOpen(false)}
+        galleryImages={data.galleryImages || []}
+        onAddImage={handleAddGalleryImage}
+        onDeleteImage={handleDeleteGalleryImage}
+        onSelectChatBackground={(bgUrl) => {
+          if (activeChat) {
+            handleApplySceneBackground(activeChat.id, bgUrl);
+          }
+        }}
+        initialAlbum={galleryInitialAlbum}
+      />
+
+      <RelationshipMapModal
+        isOpen={isRelationshipMapOpen}
+        onClose={() => setIsRelationshipMapOpen(false)}
+        characters={data.characters}
+        personas={data.personas}
+        relationships={data.relationshipEdges || []}
+        onUpdateRelationships={handleUpdateRelationships}
+      />
+
+      <WorldMemoryModal
+        isOpen={isWorldMemoryOpen}
+        onClose={() => setIsWorldMemoryOpen(false)}
+        locations={data.worldLocations || []}
+        characters={data.characters}
+        personas={data.personas}
+        onUpdateLocations={handleUpdateWorldLocations}
+        onSetChatScene={(bgUrl) => {
+          if (activeChat) {
+            handleApplySceneBackground(activeChat.id, bgUrl);
+          }
+        }}
+      />
+
+      <SocialSimulatorModal
+        isOpen={isSocialSimulatorOpen}
+        onClose={() => setIsSocialSimulatorOpen(false)}
+        posts={data.socialPosts || []}
+        stories={data.socialStories || []}
+        dms={data.socialDMs || []}
+        characters={data.characters}
+        personas={data.personas}
+        onUpdatePosts={handleUpdateSocialPosts}
+        onUpdateDMs={handleUpdateSocialDMs}
+      />
     </div>
   );
 }
