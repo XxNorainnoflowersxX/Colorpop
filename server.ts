@@ -655,22 +655,23 @@ app.post('/api/openrouter/test', async (req: Request, res: Response) => {
     if (!keyRes.ok) {
       const errJson = await keyRes.json().catch(() => ({}));
       const statusCode = keyRes.status;
+      const apiMsg = errJson?.error?.message || errJson?.message || (typeof errJson?.error === 'string' ? errJson.error : null);
 
       let errorCategory: string = 'network_error';
-      let errorMessage = errJson?.error?.message || `OpenRouter returned HTTP ${statusCode}`;
-      let suggestedFix = 'Check your OpenRouter account status and API keys.';
+      let errorMessage = apiMsg || `OpenRouter returned HTTP ${statusCode}`;
+      let suggestedFix = 'Check your OpenRouter account status and API keys at https://openrouter.ai/keys.';
 
       if (statusCode === 401) {
         errorCategory = 'auth_failed';
-        errorMessage = 'Invalid OpenRouter API Key (401 Unauthorized).';
+        errorMessage = apiMsg || 'Invalid OpenRouter API Key (401 Unauthorized)';
         suggestedFix = 'Double check that your key begins with "sk-or-v1-" and has not been revoked at openrouter.ai/keys.';
       } else if (statusCode === 402) {
         errorCategory = 'no_credits';
-        errorMessage = 'Insufficient Credits (402 Payment Required).';
+        errorMessage = apiMsg || 'Insufficient Credits (402 Payment Required)';
         suggestedFix = 'Add credit balance to your account at https://openrouter.ai/credits or choose a free model.';
       } else if (statusCode === 429) {
         errorCategory = 'rate_limited';
-        errorMessage = 'Rate limit exceeded on OpenRouter (429 Too Many Requests).';
+        errorMessage = apiMsg || 'Rate limit exceeded on OpenRouter (429 Too Many Requests)';
         suggestedFix = 'Wait a few seconds before testing again, or upgrade your OpenRouter account tier.';
       }
 

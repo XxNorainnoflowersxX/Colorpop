@@ -436,6 +436,37 @@ export default function App() {
     updateData({ ...data, supabaseConfig: cfg });
   };
 
+  const handleResetData = () => {
+    localStorage.removeItem('colorpop_roleplay_data');
+    const fresh = loadLocalData();
+    updateData(fresh);
+  };
+
+  const handleExportAllData = () => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `colorpop_roleplay_backup_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportAllData = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const parsed = JSON.parse(e.target?.result as string);
+        if (parsed && typeof parsed === 'object') {
+          updateData(parsed);
+        }
+      } catch (err) {
+        console.error('Failed to parse imported backup:', err);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // Story Memory Handlers
   const handleSaveMemory = (memory: StoryMemory) => {
     const updated = [memory, ...(data.storyMemories || [])];
@@ -706,7 +737,7 @@ export default function App() {
       <ColorPopHeader
         diagnostic={diagnostic}
         firebaseConnected={Boolean(firebaseUser)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => setActiveTab('settings')}
         onOpenSearch={() => setIsCharModalOpen(true)}
         onOpenFavorites={() => setIsSavedMessagesOpen(true)}
         onOpenGitPush={() => setIsGitSyncOpen(true)}
@@ -729,11 +760,9 @@ export default function App() {
             } else if (t === 'personas') {
               setIsPersonaCreatorOpen(false);
               setPersonaToEdit(null);
-            } else if (t === 'settings') {
-              setIsSettingsOpen(true);
             }
           }}
-          onOpenMoreMenu={() => setIsSettingsOpen(true)}
+          onOpenMoreMenu={() => setActiveTab('settings')}
           rightSlot={
             <button
               onClick={() => setIsDualTrackOpen(true)}
@@ -767,6 +796,7 @@ export default function App() {
           ) : (
             <PersonaLibraryView
               personas={data.personas}
+              galleryImages={data.galleryImages || []}
               onOpenCreator={(p) => {
                 setPersonaToEdit(p || null);
                 setIsPersonaCreatorOpen(true);
@@ -783,6 +813,22 @@ export default function App() {
               }}
             />
           )
+        ) : activeTab === 'settings' ? (
+          <OpenRouterSettingsModal
+            isOpen={true}
+            isPageView={true}
+            onClose={() => setActiveTab('home')}
+            config={data.openRouterConfig}
+            onSaveConfig={handleSaveOpenRouterConfig}
+            diagnostic={diagnostic}
+            onTestConnection={testOpenRouter}
+            supabaseConfig={data.supabaseConfig}
+            onSaveSupabaseConfig={handleSaveSupabaseConfig}
+            firebaseUser={firebaseUser}
+            onResetData={handleResetData}
+            onExportData={handleExportAllData}
+            onImportData={handleImportAllData}
+          />
         ) : (
           <>
             {/* 3. Luxury Hero Banner + Quick Links 12-Jewel Grid */}
@@ -796,7 +842,7 @@ export default function App() {
                 if (id === 'characters') setIsCharModalOpen(true);
                 else if (id === 'lorebooks') setIsLoreModalOpen(true);
                 else if (id === 'plugins') setIsPluginModalOpen(true);
-                else if (id === 'settings') setIsSettingsOpen(true);
+                else if (id === 'settings') setActiveTab('settings');
                 else if (id === 'gallery') {
                   setGalleryInitialAlbum('showcase');
                   setIsGalleryOpen(true);
@@ -817,7 +863,7 @@ export default function App() {
                 if (activeChat) setInChatMode(true);
               }}
               onOpenPlugins={() => setIsPluginModalOpen(true)}
-              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenSettings={() => setActiveTab('settings')}
             />
 
             {/* 4. Glowing 4 Action Cards */}
@@ -996,6 +1042,7 @@ export default function App() {
         isOpen={isGalleryOpen}
         onClose={() => setIsGalleryOpen(false)}
         galleryImages={data.galleryImages || []}
+        personas={data.personas}
         onAddImage={handleAddGalleryImage}
         onDeleteImage={handleDeleteGalleryImage}
         onSelectChatBackground={(bgUrl) => {

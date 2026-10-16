@@ -150,10 +150,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Active entities in this chat
-  const activeCharacters = characters.filter((c) => chat.characterIds.includes(c.id));
-  const activePersona = personas.find((p) => p.id === chat.personaId) || personas[0] || null;
-  const activeLorebooks = lorebooks.filter((l) => chat.lorebookIds.includes(l.id)).slice(0, 3);
-  const activePlugins = plugins.filter((p) => chat.pluginIds.includes(p.id)).slice(0, 5);
+  const activeCharacters = characters.filter((c) => chat?.characterIds?.includes(c.id));
+  const activePersona = personas.find((p) => p.id === chat?.personaId) || personas[0] || null;
+  const activeLorebooks = lorebooks.filter((l) => chat?.lorebookIds?.includes(l.id)).slice(0, 3);
+  const activePlugins = plugins.filter((p) => chat?.pluginIds?.includes(p.id)).slice(0, 5);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

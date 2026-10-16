@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  X,
   UserCheck,
   Plus,
   Upload,
@@ -17,7 +18,7 @@ import {
   ArrowLeft,
   Image as ImageIcon,
 } from 'lucide-react';
-import { Persona } from '../types/roleplay';
+import { Persona, GalleryImage } from '../types/roleplay';
 
 interface PersonaLibraryViewProps {
   personas: Persona[];
@@ -29,6 +30,7 @@ interface PersonaLibraryViewProps {
   onStartChatWithPersona?: (persona: Persona) => void;
   onBackToHome?: () => void;
   onOpenGallery?: (album?: string) => void;
+  galleryImages?: GalleryImage[];
 }
 
 const CARD_COLORS = [
@@ -52,7 +54,10 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   onStartChatWithPersona,
   onBackToHome,
   onOpenGallery,
+  galleryImages = [],
 }) => {
+  const [activeViewTab, setActiveViewTab] = useState<'profiles' | 'gallery'>('profiles');
+  const [previewImage, setPreviewImage] = useState<GalleryImage | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'fav' | 'active'>('all');
   const [sortBy, setSortBy] = useState<'updated' | 'name'>('updated');
@@ -167,7 +172,8 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
           } else {
             newPersonas.forEach((p) => onSavePersona(p));
           }
-          showToast(`✓ Successfully imported ${newPersonas.length} persona(s) into library & Persona Gallery!`);
+          setActiveViewTab('gallery');
+          showToast(`✓ Successfully imported ${newPersonas.length} persona(s) into Persona Gallery & Library!`);
         }
       } catch (err) {
         showToast('Invalid JSON file.');
@@ -175,6 +181,36 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
     };
     reader.readAsText(file);
   };
+
+  // Compute Persona Gallery Images (both from galleryImages and directly from personas)
+  const personaGalleryList: GalleryImage[] = React.useMemo(() => {
+    const list: GalleryImage[] = [];
+    const seen = new Set<string>();
+
+    galleryImages.forEach((img) => {
+      if (img.album?.toLowerCase() === 'personas') {
+        list.push(img);
+        seen.add(img.url);
+      }
+    });
+
+    personas.forEach((p) => {
+      if (p.avatar && !seen.has(p.avatar)) {
+        list.push({
+          id: `persona_gal_${p.id}`,
+          url: p.avatar,
+          title: p.display_name || p.name,
+          album: 'personas',
+          caption: p.description?.slice(0, 120) || p.speaking_style || 'Roleplay persona profile',
+          tags: ['Persona', ...(p.traits || [])],
+          createdAt: p.createdAt || new Date().toISOString(),
+        });
+        seen.add(p.avatar);
+      }
+    });
+
+    return list;
+  }, [galleryImages, personas]);
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-6 animate-in fade-in duration-300">
@@ -187,7 +223,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       )}
 
       {/* Hero Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#ff3399]/30">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#ff3399]/30">
         <div className="flex items-center space-x-3">
           {/* Prominent Back Arrow Button */}
           {onBackToHome && (
@@ -215,17 +251,19 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         </div>
 
         <div className="flex items-center flex-wrap gap-2.5">
-          {/* Persona Gallery Album Button */}
-          {onOpenGallery && (
-            <button
-              onClick={() => onOpenGallery('personas')}
-              className="px-3.5 py-2.5 bg-gradient-to-r from-pink-600/30 to-purple-600/30 hover:from-pink-600 hover:to-purple-600 text-white rounded-xl text-xs font-bold border border-pink-400/40 flex items-center space-x-1.5 transition-all shadow hover:scale-105"
-              title="Open Persona Image Gallery"
-            >
-              <ImageIcon className="w-4 h-4 text-pink-300" />
-              <span>Persona Gallery</span>
-            </button>
-          )}
+          {/* Persona Gallery Toggle Button */}
+          <button
+            onClick={() => setActiveViewTab((prev) => (prev === 'gallery' ? 'profiles' : 'gallery'))}
+            className={`px-3.5 py-2.5 rounded-xl text-xs font-bold border flex items-center space-x-1.5 transition-all shadow hover:scale-105 ${
+              activeViewTab === 'gallery'
+                ? 'bg-gradient-to-r from-pink-600 to-purple-600 border-pink-400 text-white shadow-[0_0_15px_rgba(219,39,119,0.5)]'
+                : 'bg-white/10 hover:bg-white/20 text-[#ffd6eb] border-pink-400/30'
+            }`}
+            title="Toggle between Profiles and Persona Photo Gallery"
+          >
+            <ImageIcon className="w-4 h-4 text-pink-300" />
+            <span>{activeViewTab === 'gallery' ? 'View Profiles' : `Persona Gallery (${personaGalleryList.length})`}</span>
+          </button>
 
           {/* Create Persona */}
           <button
@@ -258,6 +296,36 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
             <span>Export All</span>
           </button>
         </div>
+      </div>
+
+      {/* View Switcher Tabs */}
+      <div className="flex items-center space-x-2 pt-4">
+        <button
+          onClick={() => setActiveViewTab('profiles')}
+          className={`px-4 py-2 rounded-2xl font-bold text-xs flex items-center space-x-2 transition-all ${
+            activeViewTab === 'profiles'
+              ? 'bg-gradient-to-r from-[#ff007f] to-[#ff3399] text-white shadow-[0_0_15px_rgba(255,0,128,0.6)]'
+              : 'bg-white/5 hover:bg-white/10 text-[#ffd6eb]/70'
+          }`}
+        >
+          <UserCheck className="w-4 h-4" />
+          <span>Persona Profiles ({personas.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveViewTab('gallery')}
+          className={`px-4 py-2 rounded-2xl font-bold text-xs flex items-center space-x-2 transition-all ${
+            activeViewTab === 'gallery'
+              ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white shadow-[0_0_15px_rgba(219,39,119,0.6)]'
+              : 'bg-white/5 hover:bg-white/10 text-[#ffd6eb]/70'
+          }`}
+        >
+          <ImageIcon className="w-4 h-4 text-pink-300" />
+          <span>Persona Photo Gallery ({personaGalleryList.length} Photos)</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 text-white font-mono">
+            Instant
+          </span>
+        </button>
       </div>
 
       {/* ACTIVE PERSONA FEATURE SPOTLIGHT */}
@@ -367,174 +435,326 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
         </div>
       </div>
 
-      {/* Persona Count */}
-      <div className="mt-4 flex items-center justify-between text-xs text-[#ffd6eb]/70 px-1">
-        <span>
-          Showing {filteredPersonas.length} of {personas.length} persona profile(s)
-        </span>
-      </div>
-
-      {/* PERSONA CARDS GRID */}
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {filteredPersonas.map((persona, index) => {
-          const accentColor = CARD_COLORS[index % CARD_COLORS.length];
-          const isCurrentDefault = persona.is_default;
-
-          return (
-            <article
-              key={persona.id}
-              className="group relative rounded-3xl p-4 bg-[#140410]/90 backdrop-blur-md border transition-all duration-300 hover:scale-[1.02] flex flex-col justify-between"
-              style={{
-                borderColor: `${accentColor}70`,
-                boxShadow: isCurrentDefault
-                  ? `0 0 25px rgba(245, 158, 11, 0.4)`
-                  : `0 0 15px ${accentColor}25`,
-              }}
+      {activeViewTab === 'gallery' ? (
+        <div className="mt-6 space-y-4 animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-pink-400" />
+                <span>Persona Photo Gallery</span>
+              </h3>
+              <p className="text-xs text-[#ffd6eb]/70">
+                Portraits and custom photos of all imported and created personas ({personaGalleryList.length} photos)
+              </p>
+            </div>
+            <button
+              onClick={() => onOpenCreator(null)}
+              className="px-3.5 py-1.5 bg-[#ff007f] hover:bg-[#ff1a8c] text-white rounded-xl text-xs font-bold transition-all shadow flex items-center space-x-1.5"
             >
-              {/* Card Header & Picture */}
-              <div>
-                <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-[#0d020b] border border-white/10 group-hover:border-white/30 transition-all">
-                  <img
-                    src={persona.avatar || '/colorpop_hero.jpg'}
-                    alt={persona.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
+              <Plus className="w-3.5 h-3.5" />
+              <span>＋ New Persona Pic</span>
+            </button>
+          </div>
 
-                  {/* Active Badge */}
-                  {isCurrentDefault && (
-                    <div className="absolute top-2 left-2 px-2.5 py-1 bg-amber-500 text-black text-[10px] font-black uppercase tracking-wider rounded-full shadow-lg flex items-center space-x-1">
-                      <Crown className="w-3 h-3 fill-black" />
-                      <span>Active</span>
-                    </div>
-                  )}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {personaGalleryList.map((img) => {
+              const matchedPersona = personas.find(
+                (p) => img.id === `persona_gal_${p.id}` || p.avatar === img.url || p.name === img.title
+              );
+              const isDefault = matchedPersona?.is_default;
 
-                  {/* Favorite Toggle Button */}
-                  <button
-                    onClick={() => handleToggleFavorite(persona)}
-                    className="absolute top-2 right-2 p-2 rounded-full bg-black/60 hover:bg-black/90 text-white transition-all backdrop-blur-sm"
-                    title={persona.favorite ? 'Favorited' : 'Add to Favorites'}
+              return (
+                <div
+                  key={img.id}
+                  className="group relative rounded-2xl overflow-hidden border border-[#ff3399]/40 bg-[#160614] hover:border-[#ff007f] shadow-lg hover:shadow-[0_0_20px_rgba(255,0,128,0.4)] transition-all flex flex-col"
+                >
+                  <div
+                    className="relative w-full aspect-square cursor-pointer overflow-hidden bg-black/40"
+                    onClick={() => setPreviewImage(img)}
                   >
-                    <Heart
-                      className={`w-3.5 h-3.5 ${
-                        persona.favorite ? 'fill-[#ff007f] text-[#ff007f]' : 'text-white/80'
-                      }`}
+                    <img
+                      src={img.url}
+                      alt={img.title}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/colorpop_hero.jpg';
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                  </button>
+
+                    {isDefault && (
+                      <div className="absolute top-2 left-2 px-2 py-0.5 bg-amber-500 text-black text-[9px] font-black uppercase rounded-full shadow flex items-center space-x-1">
+                        <Crown className="w-3 h-3 fill-black" />
+                        <span>Active</span>
+                      </div>
+                    )}
+
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                      <span className="text-[10px] text-white font-bold truncate">Click to enlarge</span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 flex-1 flex flex-col justify-between space-y-1 bg-[#12030e]">
+                    <div>
+                      <h4 className="text-xs font-bold text-white truncate" title={img.title}>
+                        {img.title}
+                      </h4>
+                      <p className="text-[10px] text-[#ff99cc] line-clamp-1">
+                        {img.caption || 'Persona portrait'}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-1">
+                      {matchedPersona ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              onSelectDefaultPersona(matchedPersona.id);
+                              showToast(`Activated "${matchedPersona.name}" as active persona!`);
+                            }}
+                            className={`flex-1 py-1 px-1.5 rounded-lg text-[10px] font-bold transition-all text-center ${
+                              isDefault
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-400'
+                                : 'bg-white/10 hover:bg-white/20 text-white'
+                            }`}
+                          >
+                            {isDefault ? 'Active' : 'Use'}
+                          </button>
+                          <button
+                            onClick={() => onOpenCreator(matchedPersona)}
+                            className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-cyan-300 transition-colors"
+                            title="Edit Persona"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setPreviewImage(img)}
+                          className="w-full py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold"
+                        >
+                          View Photo
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Persona Count */}
+          <div className="mt-4 flex items-center justify-between text-xs text-[#ffd6eb]/70 px-1">
+            <span>
+              Showing {filteredPersonas.length} of {personas.length} persona profile(s)
+            </span>
+          </div>
 
-                {/* Identity Titles */}
-                <div className="mt-3">
-                  <h3 className="text-base font-bold text-white tracking-wide truncate">
-                    {persona.display_name || persona.name}
-                  </h3>
-                  <p className="text-[11px] text-[#ff99cc] font-medium truncate mt-0.5">
-                    {persona.occupation || persona.nicknames || 'Roleplay Persona'}
-                  </p>
-                </div>
+          {/* PERSONA CARDS GRID */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {filteredPersonas.map((persona, index) => {
+              const accentColor = CARD_COLORS[index % CARD_COLORS.length];
+              const isCurrentDefault = persona.is_default;
 
-                {/* Description Snippet */}
-                <p className="mt-2 text-xs text-[#ffd6eb]/75 line-clamp-2 leading-relaxed">
-                  {persona.description || persona.speaking_style || 'No bio specified.'}
-                </p>
+              return (
+                <article
+                  key={persona.id}
+                  className="group relative rounded-3xl p-4 bg-[#140410]/90 backdrop-blur-md border transition-all duration-300 hover:scale-[1.02] flex flex-col justify-between"
+                  style={{
+                    borderColor: `${accentColor}70`,
+                    boxShadow: isCurrentDefault
+                      ? `0 0 25px rgba(245, 158, 11, 0.4)`
+                      : `0 0 15px ${accentColor}25`,
+                  }}
+                >
+                  {/* Card Header & Picture */}
+                  <div>
+                    <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-[#0d020b] border border-white/10 group-hover:border-white/30 transition-all">
+                      <img
+                        src={persona.avatar || '/colorpop_hero.jpg'}
+                        alt={persona.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
 
-                {/* Trait Tags */}
-                <div className="mt-2.5 flex flex-wrap gap-1">
-                  {persona.traits?.slice(0, 3).map((trait) => (
-                    <span
-                      key={trait}
-                      className="text-[10px] px-2 py-0.5 rounded-md bg-white/10 text-white/90 border border-white/10"
+                      {/* Active Badge */}
+                      {isCurrentDefault && (
+                        <div className="absolute top-2 left-2 px-2.5 py-1 bg-amber-500 text-black text-[10px] font-black uppercase tracking-wider rounded-full shadow-lg flex items-center space-x-1">
+                          <Crown className="w-3 h-3 fill-black" />
+                          <span>Active</span>
+                        </div>
+                      )}
+
+                      {/* Favorite Toggle Button */}
+                      <button
+                        onClick={() => handleToggleFavorite(persona)}
+                        className="absolute top-2 right-2 p-2 rounded-full bg-black/60 hover:bg-black/90 text-white transition-all backdrop-blur-sm"
+                        title={persona.favorite ? 'Favorited' : 'Add to Favorites'}
+                      >
+                        <Heart
+                          className={`w-3.5 h-3.5 ${
+                            persona.favorite ? 'fill-[#ff007f] text-[#ff007f]' : 'text-white/80'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Identity Titles */}
+                    <div className="mt-3">
+                      <h3 className="text-base font-bold text-white tracking-wide truncate">
+                        {persona.display_name || persona.name}
+                      </h3>
+                      <p className="text-[11px] text-[#ff99cc] font-medium truncate mt-0.5">
+                        {persona.occupation || persona.nicknames || 'Roleplay Persona'}
+                      </p>
+                    </div>
+
+                    {/* Description Snippet */}
+                    <p className="mt-2 text-xs text-[#ffd6eb]/75 line-clamp-2 leading-relaxed">
+                      {persona.description || persona.speaking_style || 'No bio specified.'}
+                    </p>
+
+                    {/* Trait Tags */}
+                    <div className="mt-2.5 flex flex-wrap gap-1">
+                      {persona.traits?.slice(0, 3).map((trait) => (
+                        <span
+                          key={trait}
+                          className="text-[10px] px-2 py-0.5 rounded-md bg-white/10 text-white/90 border border-white/10"
+                        >
+                          {trait}
+                        </span>
+                      ))}
+                      {(persona.traits?.length || 0) > 3 && (
+                        <span className="text-[10px] px-1.5 py-0.5 text-white/50">
+                          +{(persona.traits?.length || 0) - 3}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons Row */}
+                  <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between gap-1">
+                    {/* Use / Activate Button */}
+                    <button
+                      onClick={() => {
+                        onSelectDefaultPersona(persona.id);
+                        showToast(`Activated "${persona.name}" as default persona!`);
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1 ${
+                        isCurrentDefault
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-400'
+                          : 'bg-white/10 hover:bg-white/20 text-white'
+                      }`}
+                      title="Make this your active persona for chats"
                     >
-                      {trait}
-                    </span>
-                  ))}
-                  {(persona.traits?.length || 0) > 3 && (
-                    <span className="text-[10px] px-1.5 py-0.5 text-white/50">
-                      +{(persona.traits?.length || 0) - 3}
-                    </span>
-                  )}
-                </div>
-              </div>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{isCurrentDefault ? 'Active' : 'Use'}</span>
+                    </button>
 
-              {/* Action Buttons Row */}
-              <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between gap-1">
-                {/* Use / Activate Button */}
-                <button
-                  onClick={() => {
-                    onSelectDefaultPersona(persona.id);
-                    showToast(`Activated "${persona.name}" as default persona!`);
-                  }}
-                  className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1 ${
-                    isCurrentDefault
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-400'
-                      : 'bg-white/10 hover:bg-white/20 text-white'
-                  }`}
-                  title="Make this your active persona for chats"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{isCurrentDefault ? 'Active' : 'Use'}</span>
-                </button>
+                    {/* Edit Button */}
+                    <button
+                      onClick={() => onOpenCreator(persona)}
+                      className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-cyan-300 transition-colors"
+                      title="Edit Persona"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
 
-                {/* Edit Button */}
-                <button
-                  onClick={() => onOpenCreator(persona)}
-                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-cyan-300 transition-colors"
-                  title="Edit Persona"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
+                    {/* Duplicate Button */}
+                    <button
+                      onClick={() => handleDuplicate(persona)}
+                      className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#ffd6eb] transition-colors"
+                      title="Duplicate Persona"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
 
-                {/* Duplicate Button */}
-                <button
-                  onClick={() => handleDuplicate(persona)}
-                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#ffd6eb] transition-colors"
-                  title="Duplicate Persona"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
+                    {/* Export Single */}
+                    <button
+                      onClick={() => handleExportSingle(persona)}
+                      className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-300 transition-colors"
+                      title="Export Persona Card (JSON)"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
 
-                {/* Export Single */}
-                <button
-                  onClick={() => handleExportSingle(persona)}
-                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-300 transition-colors"
-                  title="Export Persona Card (JSON)"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                </button>
+                    {/* Delete Button */}
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete persona "${persona.name}"?`)) {
+                          onDeletePersona(persona.id);
+                          showToast(`Deleted persona "${persona.name}".`);
+                        }
+                      }}
+                      className="p-1.5 rounded-xl bg-white/10 hover:bg-rose-900/40 text-rose-300 transition-colors"
+                      title="Delete Persona"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
 
-                {/* Delete Button */}
-                <button
-                  onClick={() => {
-                    if (confirm(`Delete persona "${persona.name}"?`)) {
-                      onDeletePersona(persona.id);
-                      showToast(`Deleted persona "${persona.name}".`);
-                    }
-                  }}
-                  className="p-1.5 rounded-xl bg-white/10 hover:bg-rose-900/40 text-rose-300 transition-colors"
-                  title="Delete Persona"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
+          {filteredPersonas.length === 0 && (
+            <div className="mt-12 text-center p-10 bg-[#160614]/70 rounded-3xl border border-[#ff3399]/30">
+              <UserCheck className="w-12 h-12 text-[#ff007f] mx-auto opacity-70 mb-3" />
+              <h3 className="text-base font-bold text-white">No personas found</h3>
+              <p className="text-xs text-[#ffd6eb]/70 mt-1 max-w-sm mx-auto">
+                {searchQuery
+                  ? `No personas matching "${searchQuery}". Try a different keyword.`
+                  : 'Create your first custom persona to personalize roleplay interactions.'}
+              </p>
+              <button
+                onClick={() => onOpenCreator(null)}
+                className="mt-4 px-5 py-2.5 bg-gradient-to-r from-[#ff007f] to-[#ff3399] text-white text-xs font-bold rounded-xl shadow-[0_0_15px_rgba(255,0,128,0.5)]"
+              >
+                ＋ Create New Persona
+              </button>
+            </div>
+          )}
+        </>
+      )}
 
-      {filteredPersonas.length === 0 && (
-        <div className="mt-12 text-center p-10 bg-[#160614]/70 rounded-3xl border border-[#ff3399]/30">
-          <UserCheck className="w-12 h-12 text-[#ff007f] mx-auto opacity-70 mb-3" />
-          <h3 className="text-base font-bold text-white">No personas found</h3>
-          <p className="text-xs text-[#ffd6eb]/70 mt-1 max-w-sm mx-auto">
-            {searchQuery
-              ? `No personas matching "${searchQuery}". Try a different keyword.`
-              : 'Create your first custom persona to personalize roleplay interactions.'}
-          </p>
-          <button
-            onClick={() => onOpenCreator(null)}
-            className="mt-4 px-5 py-2.5 bg-gradient-to-r from-[#ff007f] to-[#ff3399] text-white text-xs font-bold rounded-xl shadow-[0_0_15px_rgba(255,0,128,0.5)]"
-          >
-            ＋ Create New Persona
-          </button>
+      {/* Lightbox Preview Modal with Back Button */}
+      {previewImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
+          <div className="relative max-w-3xl w-full bg-[#140410] border-2 border-[#ff3399]/60 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(255,0,128,0.6)]">
+            <div className="flex items-center justify-between p-4 border-b border-[#ff3399]/30 bg-[#0d020b]">
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-[#ff007f] text-white transition-all flex items-center space-x-1.5"
+                title="Back to Persona Gallery"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-xs font-bold">Back</span>
+              </button>
+              <h3 className="text-sm font-bold text-white truncate px-3">{previewImage.title}</h3>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-1.5 text-white/70 hover:text-white rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="max-h-[70vh] flex items-center justify-center bg-black/60 p-4">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="max-h-[60vh] max-w-full rounded-2xl object-contain shadow-2xl"
+              />
+            </div>
+            <div className="p-4 border-t border-[#ff3399]/30 bg-[#0d020b] flex items-center justify-between text-xs">
+              <span className="text-[#ffd6eb]/70">{previewImage.caption || 'Persona Photo Gallery entry'}</span>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="px-4 py-1.5 bg-[#ff007f] hover:bg-[#ff1a8c] text-white font-bold rounded-xl"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

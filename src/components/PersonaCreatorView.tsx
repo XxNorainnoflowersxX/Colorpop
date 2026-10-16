@@ -185,7 +185,10 @@ export const PersonaCreatorView: React.FC<PersonaCreatorViewProps> = ({
       // ignore
     }
 
-    showToast(initialPersona ? 'Persona updated!' : 'New persona saved to library!');
+    showToast(initialPersona ? '✓ Persona updated in Persona Library & Gallery!' : '✓ Persona saved into Persona Gallery & Library!');
+    setTimeout(() => {
+      onCancel();
+    }, 450);
   };
 
   const handleExportJSON = () => {
@@ -221,17 +224,49 @@ export const PersonaCreatorView: React.FC<PersonaCreatorViewProps> = ({
     reader.onload = (e) => {
       try {
         const json = JSON.parse(e.target?.result as string);
-        setName(json.name || json.full_name || name);
-        setDisplayName(json.display_name || json.name || displayName);
-        setNicknames(json.nicknames || nicknames);
-        setOccupation(json.occupation || occupation);
-        if (json.avatar || json.avatar_url) setAvatar(json.avatar || json.avatar_url);
-        setDescription(json.description || json.personality_description || description);
-        setAppearance(json.appearance || json.physical_description || appearance);
-        setBackstory(json.backstory || backstory);
-        setSpeakingStyle(json.speaking_style || speakingStyle);
-        if (Array.isArray(json.traits)) setTraits(json.traits);
-        showToast('Imported persona card data!');
+        const pName = json.name || json.full_name || name || 'Imported Persona';
+        const pDisplayName = json.display_name || json.name || displayName || pName;
+        const pNicknames = json.nicknames || nicknames || '';
+        const pOccupation = json.occupation || occupation || '';
+        const pAvatar = json.avatar || json.avatar_url || avatar || '/colorpop_hero.jpg';
+        const pDesc = json.description || json.personality_description || description || '';
+        const pApp = json.appearance || json.physical_description || appearance || '';
+        const pBack = json.backstory || backstory || '';
+        const pStyle = json.speaking_style || speakingStyle || '';
+        const pTraits = Array.isArray(json.traits) ? json.traits : traits;
+
+        setName(pName);
+        setDisplayName(pDisplayName);
+        setNicknames(pNicknames);
+        setOccupation(pOccupation);
+        setAvatar(pAvatar);
+        setDescription(pDesc);
+        setAppearance(pApp);
+        setBackstory(pBack);
+        setSpeakingStyle(pStyle);
+        setTraits(pTraits);
+
+        // Immediately persist to Persona Library & Persona Gallery
+        const newPersona: Persona = {
+          id: json.id || `persona_${Date.now()}`,
+          name: pName,
+          display_name: pDisplayName,
+          nicknames: pNicknames,
+          occupation: pOccupation,
+          avatar: pAvatar,
+          description: pDesc,
+          appearance: pApp,
+          backstory: pBack,
+          speaking_style: pStyle,
+          traits: pTraits,
+          is_default: isDefault,
+          favorite: !!json.favorite,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        onSavePersona(newPersona);
+        showToast(`✓ Imported and saved "${newPersona.name}" to Persona Library & Persona Gallery!`);
       } catch (err) {
         showToast('Invalid JSON file.');
       }

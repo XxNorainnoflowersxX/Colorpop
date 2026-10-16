@@ -33,6 +33,10 @@ interface OpenRouterSettingsModalProps {
   supabaseConfig: SupabaseConfig;
   onSaveSupabaseConfig: (cfg: SupabaseConfig) => void;
   firebaseUser: User | null;
+  isPageView?: boolean;
+  onResetData?: () => void;
+  onExportData?: () => void;
+  onImportData?: (file: File) => void;
 }
 
 export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = ({
@@ -45,6 +49,10 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
   supabaseConfig,
   onSaveSupabaseConfig,
   firebaseUser,
+  isPageView = false,
+  onResetData,
+  onExportData,
+  onImportData,
 }) => {
   const [apiKey, setApiKey] = useState(config.apiKey);
   const [model, setModel] = useState(config.model);
@@ -55,7 +63,7 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
   const [supaUrl, setSupaUrl] = useState(supabaseConfig.url);
   const [supaKey, setSupaKey] = useState(supabaseConfig.anonKey);
 
-  const [activeTab, setActiveTab] = useState<'openrouter' | 'firebase' | 'supabase' | 'github'>('openrouter');
+  const [activeTab, setActiveTab] = useState<'openrouter' | 'firebase' | 'supabase' | 'github' | 'data'>('openrouter');
   const [testing, setTesting] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
@@ -442,106 +450,119 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-[#140410] border-2 border-[#ff3399]/60 rounded-3xl shadow-[0_0_50px_rgba(255,0,128,0.5)] overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Toast */}
-        {saveSuccessMsg && (
-          <div className="absolute top-16 right-6 z-50 px-4 py-2 bg-emerald-950/95 border border-emerald-500 text-emerald-200 text-xs font-bold rounded-2xl shadow-xl flex items-center space-x-2 animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>{saveSuccessMsg}</span>
-          </div>
-        )}
+  const modalContent = (
+    <div className={`relative w-full ${isPageView ? 'max-w-5xl' : 'max-w-3xl'} bg-[#140410] border-2 border-[#ff3399]/60 rounded-3xl shadow-[0_0_50px_rgba(255,0,128,0.5)] overflow-hidden flex flex-col ${isPageView ? 'min-h-[600px]' : 'max-h-[90vh]'}`}>
+      {/* Toast */}
+      {saveSuccessMsg && (
+        <div className="absolute top-16 right-6 z-50 px-4 py-2 bg-emerald-950/95 border border-emerald-500 text-emerald-200 text-xs font-bold rounded-2xl shadow-xl flex items-center space-x-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>{saveSuccessMsg}</span>
+        </div>
+      )}
 
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#ff3399]/30 bg-[#0d020b]">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl bg-white/10 hover:bg-[#ff007f] text-[#ffd6eb] hover:text-white transition-all flex items-center space-x-1.5 shadow"
-              title="Back"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="text-xs font-bold hidden sm:inline">Back</span>
-            </button>
-
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#ff007f] to-[#ff3399] flex items-center justify-center text-white shadow-[0_0_15px_rgba(255,0,128,0.6)]">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-white tracking-wide">
-                Settings &amp; OpenRouter Diagnostics
-              </h2>
-              <p className="text-xs text-[#ffd6eb]/70">
-                Connect OpenRouter AI, Firebase storage, and sync to GitHub
-              </p>
-            </div>
-          </div>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#ff3399]/30 bg-[#0d020b]">
+        <div className="flex items-center space-x-3">
           <button
             onClick={onClose}
-            className="p-2 text-[#ffd6eb]/70 hover:text-white hover:bg-white/10 rounded-full transition-colors"
-            title="Close"
+            className="p-2.5 rounded-2xl bg-white/10 hover:bg-[#ff007f] text-[#ffd6eb] hover:text-white transition-all flex items-center space-x-2 shadow shrink-0"
+            title="Back to Home Dashboard"
           >
-            <X className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5" />
+            <span className="text-xs font-bold">{isPageView ? 'Back to Home' : 'Back'}</span>
           </button>
+
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#ff007f] to-[#ff3399] flex items-center justify-center text-white shadow-[0_0_15px_rgba(255,0,128,0.6)] shrink-0">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white tracking-wide">
+              Settings &amp; Configuration
+            </h2>
+            <p className="text-xs text-[#ffd6eb]/70">
+              OpenRouter AI, models, Firebase Cloud storage, Supabase, and backups
+            </p>
+          </div>
         </div>
+        <button
+          onClick={onClose}
+          className="p-2 text-[#ffd6eb]/70 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+          title="Close"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
 
-        <div className="flex border-b border-[#ff3399]/30 bg-[#1a0515]/60 px-6 pt-2">
-          <button
-            onClick={() => setActiveTab('openrouter')}
-            className={`pb-3 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'openrouter'
-                ? 'border-[#ff007f] text-[#ff3399]'
-                : 'border-transparent text-[#ffd6eb]/70 hover:text-white'
-            }`}
-          >
-            <Wifi className="w-3.5 h-3.5" />
-            <span>OpenRouter AI</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${diagnostic.status === 'connected' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-300'}`}>
-              {diagnostic.status === 'connected' ? 'Connected' : 'Problem'}
-            </span>
-          </button>
+      {/* Tabs */}
+      <div className="flex border-b border-[#ff3399]/30 bg-[#1a0515]/60 px-6 pt-2 overflow-x-auto scrollbar-none">
+        <button
+          onClick={() => setActiveTab('openrouter')}
+          className={`pb-3 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
+            activeTab === 'openrouter'
+              ? 'border-[#ff007f] text-[#ff3399]'
+              : 'border-transparent text-[#ffd6eb]/70 hover:text-white'
+          }`}
+        >
+          <Wifi className="w-3.5 h-3.5" />
+          <span>OpenRouter AI</span>
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${diagnostic.status === 'connected' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-300'}`}>
+            {diagnostic.status === 'connected' ? 'Connected' : 'Problem'}
+          </span>
+        </button>
 
-          <button
-            onClick={() => setActiveTab('firebase')}
-            className={`pb-3 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'firebase'
-                ? 'border-[#ff007f] text-[#ff3399]'
-                : 'border-transparent text-[#ffd6eb]/70 hover:text-white'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Firebase Cloud</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-400 font-mono">
-              Auto-Save
-            </span>
-          </button>
+        <button
+          onClick={() => setActiveTab('firebase')}
+          className={`pb-3 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
+            activeTab === 'firebase'
+              ? 'border-[#ff007f] text-[#ff3399]'
+              : 'border-transparent text-[#ffd6eb]/70 hover:text-white'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Firebase Cloud</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-400 font-mono">
+            Auto-Save
+          </span>
+        </button>
 
-          <button
-            onClick={() => setActiveTab('supabase')}
-            className={`pb-3 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'supabase'
-                ? 'border-[#ff007f] text-[#ff3399]'
-                : 'border-transparent text-[#ffd6eb]/70 hover:text-white'
-            }`}
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>Supabase</span>
-          </button>
+        <button
+          onClick={() => setActiveTab('supabase')}
+          className={`pb-3 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
+            activeTab === 'supabase'
+              ? 'border-[#ff007f] text-[#ff3399]'
+              : 'border-transparent text-[#ffd6eb]/70 hover:text-white'
+          }`}
+        >
+          <Database className="w-3.5 h-3.5" />
+          <span>Supabase</span>
+        </button>
 
-          <button
-            onClick={() => setActiveTab('github')}
-            className={`pb-3 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'github'
-                ? 'border-[#ff007f] text-[#ff3399]'
-                : 'border-transparent text-[#ffd6eb]/70 hover:text-white'
-            }`}
-          >
-            <GitBranch className="w-3.5 h-3.5 text-purple-400" />
-            <span>GitHub Push</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setActiveTab('github')}
+          className={`pb-3 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
+            activeTab === 'github'
+              ? 'border-[#ff007f] text-[#ff3399]'
+              : 'border-transparent text-[#ffd6eb]/70 hover:text-white'
+          }`}
+        >
+          <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+          <span>GitHub Push</span>
+        </button>
 
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs text-[#ffd6eb]">
+        <button
+          onClick={() => setActiveTab('data')}
+          className={`pb-3 px-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
+            activeTab === 'data'
+              ? 'border-[#ff007f] text-[#ff3399]'
+              : 'border-transparent text-[#ffd6eb]/70 hover:text-white'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5 text-amber-400" />
+          <span>Data &amp; Backup</span>
+        </button>
+      </div>
+
+      <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs text-[#ffd6eb]">
           {activeTab === 'openrouter' && (
             <div className="space-y-5">
               <div
@@ -996,6 +1017,105 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
               )}
             </div>
           )}
+
+          {activeTab === 'data' && (
+            <div className="space-y-4">
+              <div className="p-4 bg-[#1a0515] border border-[#ff3399]/40 rounded-2xl space-y-3">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                    <Sliders className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-sm">Backup, Restore &amp; Reset</h4>
+                    <p className="text-[11px] text-[#ffd6eb]/70">
+                      Manage local and cloud data, import/export roleplays, and reset to defaults
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onExportData) {
+                        onExportData();
+                      } else {
+                        const allData = localStorage.getItem('colorpop_roleplay_data');
+                        const blob = new Blob([allData || '{}'], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `colorpop_backup_${Date.now()}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }
+                      setSaveSuccessMsg('✓ Backup JSON downloaded successfully!');
+                      setTimeout(() => setSaveSuccessMsg(null), 3000);
+                    }}
+                    className="p-3 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl font-bold text-white flex items-center justify-center space-x-2 transition-all shadow"
+                  >
+                    <span>Download Full Backup JSON</span>
+                  </button>
+
+                  <label className="p-3 bg-white/10 hover:bg-white/20 border border-white/15 rounded-xl font-bold text-white flex items-center justify-center space-x-2 transition-all shadow cursor-pointer">
+                    <span>Import Backup JSON</span>
+                    <input
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (onImportData) {
+                            onImportData(file);
+                          } else {
+                            const reader = new FileReader();
+                            reader.onload = (evt) => {
+                              try {
+                                const parsed = JSON.parse(evt.target?.result as string);
+                                if (parsed) {
+                                  localStorage.setItem('colorpop_roleplay_data', JSON.stringify(parsed));
+                                  window.location.reload();
+                                }
+                              } catch (err) {
+                                alert('Invalid JSON backup file');
+                              }
+                            };
+                            reader.readAsText(file);
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div>
+                    <h5 className="font-bold text-rose-300">Reset System to Defaults</h5>
+                    <p className="text-[10px] text-[#ffd6eb]/60">
+                      Restores default characters, lorebooks, and personas. Custom data will be replaced.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Are you sure you want to reset all data to default presets?')) {
+                        if (onResetData) {
+                          onResetData();
+                        } else {
+                          localStorage.removeItem('colorpop_roleplay_data');
+                          window.location.reload();
+                        }
+                      }
+                    }}
+                    className="px-3.5 py-2 bg-rose-600/30 hover:bg-rose-600 border border-rose-500/50 text-white rounded-xl font-bold text-xs transition-all shadow"
+                  >
+                    Reset to Factory Defaults
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between px-6 py-4 border-t border-[#ff3399]/30 bg-[#0d020b]">
@@ -1008,7 +1128,7 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
               onClick={onClose}
               className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#ffd6eb] font-bold text-xs transition-colors"
             >
-              Cancel
+              {isPageView ? 'Back to Home' : 'Cancel'}
             </button>
             <button
               onClick={handleSave}
@@ -1019,6 +1139,19 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
           </div>
         </div>
       </div>
+    );
+
+  if (isPageView) {
+    return (
+      <div className="w-full max-w-5xl mx-auto px-4 py-4 animate-in fade-in duration-300">
+        {modalContent}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+      {modalContent}
     </div>
   );
 };

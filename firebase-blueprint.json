@@ -1,0 +1,31 @@
+{
+  "collections": {
+    "users": {
+      "documents": {
+        "{userId}": {
+          "fields": {
+            "characters": { "type": "array" },
+            "lorebooks": { "type": "array" },
+            "personas": { "type": "array" },
+            "plugins": { "type": "array" },
+            "chats": { "type": "array" },
+            "activeChatId": { "type": "string" },
+            "storyMemories": { "type": "array" },
+            "savedMessages": { "type": "array" },
+            "galleryImages": { "type": "array" },
+            "relationshipEdges": { "type": "array" },
+            "worldLocations": { "type": "array" },
+            "socialPosts": { "type": "array" },
+            "socialStories": { "type": "array" },
+            "socialDMs": { "type": "array" },
+            "updatedAt": { "type": "string" }
+          },
+          "rules": {
+            "read": "request.auth != null && request.auth.uid == userId",
+            "write": "request.auth != null && request.auth.uid == userId"
+          }
+        }
+      }
+    }
+  }
+}

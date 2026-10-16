@@ -11,13 +11,15 @@ import {
   Layers,
   Heart,
   ExternalLink,
+  ArrowLeft,
 } from 'lucide-react';
-import { GalleryImage } from '../types/roleplay';
+import { GalleryImage, Persona } from '../types/roleplay';
 
 interface GalleryModalProps {
   isOpen: boolean;
   onClose: () => void;
   galleryImages: GalleryImage[];
+  personas?: Persona[];
   onAddImage: (image: GalleryImage) => void;
   onDeleteImage: (imageId: string) => void;
   onSelectChatBackground?: (imageUrl: string) => void;
@@ -28,6 +30,7 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
   isOpen,
   onClose,
   galleryImages,
+  personas = [],
   onAddImage,
   onDeleteImage,
   onSelectChatBackground,
@@ -50,17 +53,46 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
     }
   }, [isOpen, initialAlbum]);
 
+  // Compute unified gallery including persona gallery profiles immediately
+  const effectiveImages = React.useMemo(() => {
+    const list = [...galleryImages];
+    const seenUrls = new Set(list.map((img) => img.url));
+    const seenIds = new Set(list.map((img) => img.id));
+
+    if (personas && personas.length > 0) {
+      personas.forEach((p) => {
+        const pId = `persona_gal_${p.id}`;
+        const avatarUrl = p.avatar || '/colorpop_hero.jpg';
+        if (!seenIds.has(pId) && !seenUrls.has(avatarUrl)) {
+          list.push({
+            id: pId,
+            url: avatarUrl,
+            title: p.display_name || p.name,
+            album: 'personas',
+            caption: p.description?.slice(0, 120) || p.speaking_style || 'User persona profile',
+            tags: ['Persona', ...(p.traits || [])],
+            createdAt: p.createdAt || new Date().toISOString(),
+          });
+          seenUrls.add(avatarUrl);
+          seenIds.add(pId);
+        }
+      });
+    }
+
+    return list;
+  }, [galleryImages, personas]);
+
   if (!isOpen) return null;
 
   // Extract distinct album names - always feature showcase, characters, and personas
   const allAlbums = Array.from(
-    new Set(['showcase', 'characters', 'personas', ...galleryImages.map((img) => img.album.trim().toLowerCase())])
+    new Set(['showcase', 'characters', 'personas', ...effectiveImages.map((img) => img.album.trim().toLowerCase())])
   );
 
   const filteredImages =
     selectedAlbum === 'all'
-      ? galleryImages
-      : galleryImages.filter((img) => img.album.trim().toLowerCase() === selectedAlbum.toLowerCase());
+      ? effectiveImages
+      : effectiveImages.filter((img) => img.album.trim().toLowerCase() === selectedAlbum.toLowerCase());
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,7 +141,16 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#ff3399]/30 bg-[#0d020b]">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#00b4db] to-[#0083b0] flex items-center justify-center text-white shadow-[0_0_15px_rgba(0,180,219,0.6)]">
+            <button
+              onClick={onClose}
+              className="p-2 rounded-2xl bg-white/10 hover:bg-[#ff007f] text-[#ffd6eb] hover:text-white transition-all flex items-center space-x-1.5 shadow shrink-0"
+              title="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="text-xs font-bold hidden sm:inline">Back</span>
+            </button>
+
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#00b4db] to-[#0083b0] flex items-center justify-center text-white shadow-[0_0_15px_rgba(0,180,219,0.6)] shrink-0">
               <ImageIcon className="w-5 h-5" />
             </div>
             <div>
@@ -158,12 +199,12 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>All Albums ({galleryImages.length})</span>
+            <span>All Albums ({effectiveImages.length})</span>
           </button>
 
           {allAlbums.map((alb) => {
             const isShowcase = alb.toLowerCase() === 'showcase';
-            const count = galleryImages.filter(
+            const count = effectiveImages.filter(
               (img) => img.album.trim().toLowerCase() === alb.toLowerCase()
             ).length;
 

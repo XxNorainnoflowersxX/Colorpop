@@ -138,10 +138,10 @@ export const DualTrackOverlay: React.FC<DualTrackOverlayProps> = ({
   };
 
   // Active chat entities
-  const activeChar = characters.find((c) => activeChat?.characterIds.includes(c.id)) || characters[0];
+  const activeChar = characters.find((c) => activeChat?.characterIds?.includes(c.id)) || characters[0];
   const activePersona = personas.find((p) => p.id === activeChat?.personaId) || personas[0];
-  const activeLorebooks = lorebooks.filter((l) => activeChat?.lorebookIds.includes(l.id)).slice(0, 3);
-  const activePlugins = plugins.filter((p) => activeChat?.pluginIds.includes(p.id)).slice(0, 5);
+  const activeLorebooks = lorebooks.filter((l) => activeChat?.lorebookIds?.includes(l.id)).slice(0, 3);
+  const activePlugins = plugins.filter((p) => activeChat?.pluginIds?.includes(p.id)).slice(0, 5);
 
   return (
     <div

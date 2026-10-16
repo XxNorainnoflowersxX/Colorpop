@@ -157,7 +157,19 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#ff3399]/30 bg-[#0d020b]">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#ff007f] to-[#ff3399] flex items-center justify-center text-white shadow-[0_0_15px_rgba(255,0,128,0.6)]">
+            <button
+              onClick={() => {
+                if (view === 'create') setView('library');
+                else onClose();
+              }}
+              className="p-2 rounded-xl bg-white/10 hover:bg-[#ff007f] text-[#ffd6eb] hover:text-white transition-all flex items-center space-x-1.5 shadow shrink-0"
+              title={view === 'create' ? 'Back to Character Library' : 'Back / Close'}
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="text-xs font-bold hidden sm:inline">Back</span>
+            </button>
+
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#ff007f] to-[#ff3399] flex items-center justify-center text-white shadow-[0_0_15px_rgba(255,0,128,0.6)] shrink-0">
               <Users className="w-5 h-5" />
             </div>
             <div>

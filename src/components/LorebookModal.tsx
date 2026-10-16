@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   X,
+  ArrowLeft,
   BookOpen,
   Plus,
   Upload,
@@ -131,7 +132,16 @@ export const LorebookModal: React.FC<LorebookModalProps> = ({
       <div className="relative w-full max-w-4xl bg-[#140410] border-2 border-[#ff3399]/60 rounded-3xl shadow-[0_0_50px_rgba(255,0,128,0.5)] overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#ff3399]/30 bg-[#0d020b]">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#ff6f61] to-[#ff8577] flex items-center justify-center text-white shadow-[0_0_15px_rgba(255,111,97,0.6)]">
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl bg-white/10 hover:bg-[#ff007f] text-[#ffd6eb] hover:text-white transition-all flex items-center space-x-1.5 shadow shrink-0"
+              title="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="text-xs font-bold hidden sm:inline">Back</span>
+            </button>
+
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#ff6f61] to-[#ff8577] flex items-center justify-center text-white shadow-[0_0_15px_rgba(255,111,97,0.6)] shrink-0">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>

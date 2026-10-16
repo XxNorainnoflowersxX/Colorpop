@@ -81,4 +81,5 @@ export async function logOutFirebase() {
   return signOut(auth);
 }
 
-testConnection();
+// Removed immediate top-level call to avoid unhandled rejections during initial load.
+// testConnection();
