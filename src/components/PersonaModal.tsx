@@ -29,8 +29,43 @@ export const PersonaModal: React.FC<PersonaModalProps> = ({
   const [speakingStyle, setSpeakingStyle] = useState('');
   const [traitInput, setTraitInput] = useState('');
   const [traits, setTraits] = useState<string[]>(['Glamorous', 'Witty']);
+  const [notification, setNotification] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleImportPersonaFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        const data = Array.isArray(parsed) ? parsed[0] : (parsed.data || parsed);
+        const personaName = data.name || data.display_name || file.name.replace(/\.[^/.]+$/, '');
+        const newPersona: Persona = {
+          id: `persona_${Date.now()}`,
+          name: personaName,
+          display_name: data.display_name || personaName,
+          avatar: data.avatar || data.avatar_url || '/colorpop_hero.jpg',
+          description: data.description || data.personality_description || 'Imported roleplay persona',
+          speaking_style: data.speaking_style || '',
+          traits: Array.isArray(data.traits) ? data.traits : ['Alluring', 'Confident'],
+          is_default: personas.length === 0,
+          createdAt: new Date().toISOString(),
+        };
+
+        onSavePersona(newPersona);
+        setNotification(`★ Imported and saved "${newPersona.name}" to Persona Gallery!`);
+        setTimeout(() => setNotification(null), 3500);
+        setIsCreating(false);
+      } catch (err: any) {
+        setNotification('Could not parse persona JSON file.');
+        setTimeout(() => setNotification(null), 3500);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +83,8 @@ export const PersonaModal: React.FC<PersonaModalProps> = ({
     };
 
     onSavePersona(newPersona);
+    setNotification(`Saved "${newPersona.name}" to Persona Gallery!`);
+    setTimeout(() => setNotification(null), 3500);
     setIsCreating(false);
     setName('');
     setDescription('');

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
+  ArrowLeft,
   Wifi,
   AlertCircle,
   CheckCircle2,
@@ -56,11 +57,25 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
 
   const [activeTab, setActiveTab] = useState<'openrouter' | 'firebase' | 'supabase' | 'github'>('openrouter');
   const [testing, setTesting] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   const [pushingGit, setPushingGit] = useState(false);
   const [gitPushResult, setGitPushResult] = useState<{ success: boolean; message: string; output?: string } | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // Sync state whenever settings modal opens or config updates
+  useEffect(() => {
+    if (isOpen) {
+      setApiKey(config.apiKey || '');
+      setModel(config.model || 'gryphe/mythomax-l2-13b');
+      setTemperature(config.temperature ?? 0.85);
+      setMaxTokens(config.maxTokens ?? 1024);
+      setTopP(config.topP ?? 0.95);
+      setSupaUrl(supabaseConfig.url || '');
+      setSupaKey(supabaseConfig.anonKey || '');
+    }
+  }, [isOpen, config, supabaseConfig]);
 
   if (!isOpen) return null;
 
@@ -73,18 +88,22 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
   const handleSave = () => {
     onSaveConfig({
       ...config,
-      apiKey,
-      model,
+      apiKey: apiKey.trim(),
+      model: model.trim(),
       temperature,
       maxTokens,
       topP,
     });
     onSaveSupabaseConfig({
-      url: supaUrl,
-      anonKey: supaKey,
-      connected: Boolean(supaUrl && supaKey),
+      url: supaUrl.trim(),
+      anonKey: supaKey.trim(),
+      connected: Boolean(supaUrl.trim() && supaKey.trim()),
     });
-    onClose();
+    setSaveSuccessMsg('✓ Settings saved successfully!');
+    setTimeout(() => {
+      setSaveSuccessMsg(null);
+      onClose();
+    }, 400);
   };
 
   const handleGitPush = async () => {
@@ -426,8 +445,25 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative w-full max-w-2xl bg-[#140410] border-2 border-[#ff3399]/60 rounded-3xl shadow-[0_0_50px_rgba(255,0,128,0.5)] overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Toast */}
+        {saveSuccessMsg && (
+          <div className="absolute top-16 right-6 z-50 px-4 py-2 bg-emerald-950/95 border border-emerald-500 text-emerald-200 text-xs font-bold rounded-2xl shadow-xl flex items-center space-x-2 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>{saveSuccessMsg}</span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#ff3399]/30 bg-[#0d020b]">
           <div className="flex items-center space-x-3">
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl bg-white/10 hover:bg-[#ff007f] text-[#ffd6eb] hover:text-white transition-all flex items-center space-x-1.5 shadow"
+              title="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="text-xs font-bold hidden sm:inline">Back</span>
+            </button>
+
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#ff007f] to-[#ff3399] flex items-center justify-center text-white shadow-[0_0_15px_rgba(255,0,128,0.6)]">
               <Sparkles className="w-5 h-5" />
             </div>
@@ -443,6 +479,7 @@ export const OpenRouterSettingsModal: React.FC<OpenRouterSettingsModalProps> = (
           <button
             onClick={onClose}
             className="p-2 text-[#ffd6eb]/70 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+            title="Close"
           >
             <X className="w-5 h-5" />
           </button>

@@ -70,16 +70,20 @@ export function buildOpenRouterMessages(params: AssembleParams): OpenRouterApiMe
   }
 
   // 6. Active Plugins (Up to 5 Plugins)
-  const activePlugins = plugins.filter((p) => chat.pluginIds.includes(p.id) && p.enabled).slice(0, 5);
+  const activePlugins = plugins
+    .filter((p) => p.enabled && (chat.pluginIds && chat.pluginIds.length > 0 ? chat.pluginIds.includes(p.id) : true))
+    .slice(0, 5);
   if (activePlugins.length > 0) {
     const pluginDirectives = activePlugins
       .map((p) => {
-        let directive = `- [Plugin: ${p.name}] ${p.description}`;
-        if (p.customPrompt) directive += ` Directives: ${p.customPrompt}`;
+        let directive = `• [Active Plugin: ${p.name}] ${p.description}`;
+        if (p.customPrompt) {
+          directive += `\n  Directives: ${p.customPrompt}`;
+        }
         return directive;
       })
-      .join('\n');
-    systemParts.push(`[ACTIVE PLUGINS (SLOTS 1-5)]\n${pluginDirectives}\n`);
+      .join('\n\n');
+    systemParts.push(`[ACTIVE PLUGINS & GAMEPLAY ENHANCEMENTS]\n${pluginDirectives}\n`);
   }
 
   const resultMessages: OpenRouterApiMessage[] = [

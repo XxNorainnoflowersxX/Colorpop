@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import {
   X,
+  ArrowLeft,
   Upload,
   Download,
   Plus,
   Users,
   Search,
   MessageSquare,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Character } from '../types/roleplay';
 import { parseCharacterFile, exportCharacterJson } from '../utils/pngParser';
@@ -42,6 +44,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>(['Romance', 'Billionaire']);
   const [isEditingId, setIsEditingId] = useState<string | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -51,35 +54,48 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
 
     try {
       const parsed = await parseCharacterFile(file);
-      if (parsed.name) setName(parsed.name);
-      if (parsed.avatar) setAvatar(parsed.avatar);
-      if (parsed.summary) setSummary(parsed.summary);
-      if (parsed.description) setDescription(parsed.description);
-      if (parsed.personality) setPersonality(parsed.personality);
-      if (parsed.scenario) setScenario(parsed.scenario);
-      if (parsed.first_mes) setFirstMes(parsed.first_mes);
-      if (parsed.mes_example) setMesExample(parsed.mes_example);
-      if (parsed.system_prompt) setSystemPrompt(parsed.system_prompt);
-      if (parsed.tags?.length) setTags(parsed.tags);
-      setView('create');
-    } catch (err) {
+      const charName = parsed.name?.trim() || file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+      const newChar: Character = {
+        id: `char_${Date.now()}`,
+        name: charName,
+        avatar: parsed.avatar || '/lucious.jpg',
+        summary: parsed.summary?.trim() || parsed.description?.slice(0, 140) || 'Imported character into gallery',
+        description: parsed.description?.trim() || '',
+        personality: parsed.personality?.trim() || '',
+        scenario: parsed.scenario?.trim() || '',
+        first_mes: parsed.first_mes?.trim() || `*${charName} arrives, looking directly at you.* "Shall we begin?"`,
+        mes_example: parsed.mes_example?.trim() || '',
+        system_prompt: parsed.system_prompt?.trim() || '',
+        tags: parsed.tags?.length ? parsed.tags : ['Imported', 'Romance'],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Automatically save to the character gallery immediately
+      onSaveCharacter(newChar);
+      setNotification(`★ Imported and saved "${newChar.name}" to character gallery!`);
+      setTimeout(() => setNotification(null), 4000);
+      setView('library');
+    } catch (err: any) {
       console.error('Failed to parse file:', err);
+      setNotification(`Could not import file: ${err.message || 'Invalid format'}`);
+      setTimeout(() => setNotification(null), 4000);
     }
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !firstMes.trim()) return;
+    if (!name.trim()) return;
 
     const newChar: Character = {
       id: isEditingId || `char_${Date.now()}`,
       name: name.trim(),
       avatar: avatar || '/lucious.jpg',
-      summary: summary.trim(),
+      summary: summary.trim() || description.slice(0, 140),
       description: description.trim(),
       personality: personality.trim(),
       scenario: scenario.trim(),
-      first_mes: firstMes.trim(),
+      first_mes: firstMes.trim() || `*${name.trim()} smiles warmly at you.* "It is wonderful to meet you."`,
       mes_example: mesExample.trim(),
       system_prompt: systemPrompt.trim(),
       tags,
@@ -88,6 +104,8 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     };
 
     onSaveCharacter(newChar);
+    setNotification(`Saved "${newChar.name}" to character gallery!`);
+    setTimeout(() => setNotification(null), 3500);
     resetForm();
     setView('library');
   };
@@ -188,6 +206,14 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
           </div>
         </div>
 
+        {/* Notification Toast */}
+        {notification && (
+          <div className="mx-6 mt-3 px-4 py-2 bg-gradient-to-r from-[#ff007f] to-[#9b51e0] text-white text-xs font-bold rounded-2xl shadow-[0_0_20px_rgba(255,0,128,0.7)] flex items-center justify-between animate-in fade-in">
+            <span>{notification}</span>
+            <button onClick={() => setNotification(null)} className="text-white/80 hover:text-white ml-2 text-xs">✕</button>
+          </div>
+        )}
+
         {/* View 1: Library */}
         {view === 'library' && (
           <div className="p-6 overflow-y-auto space-y-4 flex-1">
@@ -210,8 +236,11 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                 >
                   <div className="flex items-start space-x-3.5">
                     <img
-                      src={char.avatar}
+                      src={char.avatar || '/lucious.jpg'}
                       alt={char.name}
+                      onError={(e) => {
+                        e.currentTarget.src = '/lucious.jpg';
+                      }}
                       className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#ff3399]/50 shadow-md shrink-0"
                     />
                     <div className="space-y-1 flex-1 min-w-0">
@@ -279,7 +308,14 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
               <div className="space-y-2">
                 <label className="font-bold text-white block">Avatar</label>
                 <div className="relative w-full aspect-square rounded-2xl overflow-hidden border-2 border-[#ff3399]/40 bg-[#1e0818] group">
-                  <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
+                  <img
+                    src={avatar || '/lucious.jpg'}
+                    alt="Avatar"
+                    onError={(e) => {
+                      e.currentTarget.src = '/lucious.jpg';
+                    }}
+                    className="w-full h-full object-cover"
+                  />
                   <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity text-white text-xs font-bold">
                     <Upload className="w-5 h-5 mb-1" />
                     <span>Change Image</span>

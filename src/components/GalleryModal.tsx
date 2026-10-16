@@ -42,11 +42,19 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
   const [newTags, setNewTags] = useState('');
   const [activePreviewImage, setActivePreviewImage] = useState<GalleryImage | null>(null);
 
+  // Sync selected album when modal opens or initialAlbum prop changes
+  React.useEffect(() => {
+    if (isOpen && initialAlbum) {
+      setSelectedAlbum(initialAlbum);
+      setNewAlbum(initialAlbum);
+    }
+  }, [isOpen, initialAlbum]);
+
   if (!isOpen) return null;
 
-  // Extract distinct album names
+  // Extract distinct album names - always feature showcase, characters, and personas
   const allAlbums = Array.from(
-    new Set(['showcase', ...galleryImages.map((img) => img.album.trim().toLowerCase())])
+    new Set(['showcase', 'characters', 'personas', ...galleryImages.map((img) => img.album.trim().toLowerCase())])
   );
 
   const filteredImages =
@@ -329,6 +337,9 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
                     <img
                       src={img.url}
                       alt={img.title}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/colorpop_hero.jpg';
+                      }}
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none" />
@@ -403,6 +414,9 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
                 <img
                   src={activePreviewImage.url}
                   alt={activePreviewImage.title}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/colorpop_hero.jpg';
+                  }}
                   className="w-full h-full object-contain"
                 />
                 <button

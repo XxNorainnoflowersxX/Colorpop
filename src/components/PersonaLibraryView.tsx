@@ -14,6 +14,8 @@ import {
   MessageSquare,
   Filter,
   Check,
+  ArrowLeft,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Persona } from '../types/roleplay';
 
@@ -21,9 +23,12 @@ interface PersonaLibraryViewProps {
   personas: Persona[];
   onOpenCreator: (personaToEdit?: Persona | null) => void;
   onSavePersona: (persona: Persona) => void;
+  onSavePersonas?: (personas: Persona[]) => void;
   onDeletePersona: (personaId: string) => void;
   onSelectDefaultPersona: (personaId: string) => void;
   onStartChatWithPersona?: (persona: Persona) => void;
+  onBackToHome?: () => void;
+  onOpenGallery?: (album?: string) => void;
 }
 
 const CARD_COLORS = [
@@ -41,9 +46,12 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
   personas,
   onOpenCreator,
   onSavePersona,
+  onSavePersonas,
   onDeletePersona,
   onSelectDefaultPersona,
   onStartChatWithPersona,
+  onBackToHome,
+  onOpenGallery,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'fav' | 'active'>('all');
@@ -128,7 +136,7 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
       try {
         const data = JSON.parse(e.target?.result as string);
         const importedArray = Array.isArray(data) ? data : [data];
-        let count = 0;
+        const newPersonas: Persona[] = [];
 
         importedArray.forEach((item: any) => {
           if (item && (item.name || item.full_name || item.display_name)) {
@@ -149,12 +157,18 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             };
-            onSavePersona(newP);
-            count++;
+            newPersonas.push(newP);
           }
         });
 
-        showToast(`Successfully imported ${count} persona(s)!`);
+        if (newPersonas.length > 0) {
+          if (onSavePersonas) {
+            onSavePersonas(newPersonas);
+          } else {
+            newPersonas.forEach((p) => onSavePersona(p));
+          }
+          showToast(`✓ Successfully imported ${newPersonas.length} persona(s) into library & Persona Gallery!`);
+        }
       } catch (err) {
         showToast('Invalid JSON file.');
       }
@@ -174,23 +188,45 @@ export const PersonaLibraryView: React.FC<PersonaLibraryViewProps> = ({
 
       {/* Hero Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#ff3399]/30">
-        <div>
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#9b51e0] to-[#ff007f] flex items-center justify-center text-white shadow-[0_0_20px_rgba(255,0,128,0.5)]">
-              <UserCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-wide">
-                ✧ Persona Library
-              </h1>
-              <p className="text-xs text-[#ffd6eb]/70 mt-0.5">
-                Switch between your roleplay identities, manage pictures, or craft custom profiles
-              </p>
-            </div>
+        <div className="flex items-center space-x-3">
+          {/* Prominent Back Arrow Button */}
+          {onBackToHome && (
+            <button
+              onClick={onBackToHome}
+              className="p-2.5 rounded-2xl bg-white/10 hover:bg-[#ff007f] text-[#ffd6eb] hover:text-white transition-all flex items-center space-x-1.5 shadow shrink-0"
+              title="Back to Home Dashboard"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="text-xs font-bold hidden sm:inline">Back</span>
+            </button>
+          )}
+
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#9b51e0] to-[#ff007f] flex items-center justify-center text-white shadow-[0_0_20px_rgba(255,0,128,0.5)] shrink-0">
+            <UserCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-wide">
+              ✧ Persona Library &amp; Gallery
+            </h1>
+            <p className="text-xs text-[#ffd6eb]/70 mt-0.5">
+              Switch identities, manage pictures, or craft custom profiles (auto-saved to Persona Gallery)
+            </p>
           </div>
         </div>
 
         <div className="flex items-center flex-wrap gap-2.5">
+          {/* Persona Gallery Album Button */}
+          {onOpenGallery && (
+            <button
+              onClick={() => onOpenGallery('personas')}
+              className="px-3.5 py-2.5 bg-gradient-to-r from-pink-600/30 to-purple-600/30 hover:from-pink-600 hover:to-purple-600 text-white rounded-xl text-xs font-bold border border-pink-400/40 flex items-center space-x-1.5 transition-all shadow hover:scale-105"
+              title="Open Persona Image Gallery"
+            >
+              <ImageIcon className="w-4 h-4 text-pink-300" />
+              <span>Persona Gallery</span>
+            </button>
+          )}
+
           {/* Create Persona */}
           <button
             onClick={() => onOpenCreator(null)}

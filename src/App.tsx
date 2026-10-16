@@ -245,7 +245,28 @@ export default function App() {
     const updated = exists
       ? data.characters.map((c) => (c.id === char.id ? char : c))
       : [char, ...data.characters];
-    updateData({ ...data, characters: updated });
+
+    // Automatically sync imported/created character to the Character Gallery album
+    let newGallery = [...(data.galleryImages || [])];
+    if (char.avatar) {
+      const existingGalIdx = newGallery.findIndex((g) => g.id === `char_gal_${char.id}`);
+      const galItem: GalleryImage = {
+        id: `char_gal_${char.id}`,
+        url: char.avatar,
+        title: char.name,
+        album: 'characters',
+        caption: char.summary || char.description?.slice(0, 120) || 'Character portrait',
+        tags: ['Character', ...(char.tags || [])],
+        createdAt: new Date().toISOString(),
+      };
+      if (existingGalIdx >= 0) {
+        newGallery[existingGalIdx] = galItem;
+      } else {
+        newGallery.unshift(galItem);
+      }
+    }
+
+    updateData({ ...data, characters: updated, galleryImages: newGallery });
   };
 
   const handleSaveLorebook = (lore: Lorebook) => {
@@ -257,18 +278,81 @@ export default function App() {
   };
 
   const handleSavePersona = (persona: Persona) => {
-    const exists = data.personas.find((p) => p.id === persona.id);
-    let updated: Persona[];
-    if (exists) {
-      updated = data.personas.map((p) => (p.id === persona.id ? persona : p));
-    } else {
-      updated = [persona, ...data.personas];
-    }
-    // If this persona is marked default, set all others to false
-    if (persona.is_default) {
-      updated = updated.map((p) => ({ ...p, is_default: p.id === persona.id }));
-    }
-    updateData({ ...data, personas: updated });
+    setData((prev) => {
+      const exists = prev.personas.find((p) => p.id === persona.id);
+      let updatedPersonas: Persona[];
+      if (exists) {
+        updatedPersonas = prev.personas.map((p) => (p.id === persona.id ? persona : p));
+      } else {
+        updatedPersonas = [persona, ...prev.personas];
+      }
+      if (persona.is_default) {
+        updatedPersonas = updatedPersonas.map((p) => ({ ...p, is_default: p.id === persona.id }));
+      }
+
+      // Automatically sync imported/created persona to the Persona Gallery album IMMEDIATELY
+      const avatarUrl = persona.avatar || '/colorpop_hero.jpg';
+      let newGallery = [...(prev.galleryImages || [])];
+      const existingGalIdx = newGallery.findIndex((g) => g.id === `persona_gal_${persona.id}`);
+      const galItem: GalleryImage = {
+        id: `persona_gal_${persona.id}`,
+        url: avatarUrl,
+        title: persona.display_name || persona.name,
+        album: 'personas',
+        caption: persona.description?.slice(0, 120) || persona.speaking_style || 'User persona profile',
+        tags: ['Persona', ...(persona.traits || [])],
+        createdAt: new Date().toISOString(),
+      };
+      if (existingGalIdx >= 0) {
+        newGallery[existingGalIdx] = galItem;
+      } else {
+        newGallery.unshift(galItem);
+      }
+
+      const nextData = { ...prev, personas: updatedPersonas, galleryImages: newGallery };
+      saveLocalData(nextData);
+      syncToFirebase(nextData);
+      return nextData;
+    });
+  };
+
+  const handleSavePersonas = (incoming: Persona[]) => {
+    if (!incoming.length) return;
+    setData((prev) => {
+      let currentPersonas = [...prev.personas];
+      let currentGallery = [...(prev.galleryImages || [])];
+
+      incoming.forEach((persona) => {
+        const exists = currentPersonas.find((p) => p.id === persona.id);
+        if (exists) {
+          currentPersonas = currentPersonas.map((p) => (p.id === persona.id ? persona : p));
+        } else {
+          currentPersonas.unshift(persona);
+        }
+
+        const avatarUrl = persona.avatar || '/colorpop_hero.jpg';
+        const existingGalIdx = currentGallery.findIndex((g) => g.id === `persona_gal_${persona.id}`);
+        const galItem: GalleryImage = {
+          id: `persona_gal_${persona.id}`,
+          url: avatarUrl,
+          title: persona.display_name || persona.name,
+          album: 'personas',
+          caption: persona.description?.slice(0, 120) || persona.speaking_style || 'User persona profile',
+          tags: ['Persona', ...(persona.traits || [])],
+          createdAt: new Date().toISOString(),
+        };
+        if (existingGalIdx >= 0) {
+          currentGallery[existingGalIdx] = galItem;
+        } else {
+          currentGallery.unshift(galItem);
+        }
+      });
+
+      const nextData = { ...prev, personas: currentPersonas, galleryImages: currentGallery };
+      saveLocalData(nextData);
+      syncToFirebase(nextData);
+      return nextData;
+    });
   };
 
   const handleDeletePersona = (personaId: string) => {
@@ -301,8 +385,46 @@ export default function App() {
   };
 
   const handleTogglePlugin = (pluginId: string) => {
+    const targetPlugin = data.plugins.find((p) => p.id === pluginId);
+    const willBeEnabled = targetPlugin ? !targetPlugin.enabled : true;
     const updated = data.plugins.map((p) => (p.id === pluginId ? { ...p, enabled: !p.enabled } : p));
-    updateData({ ...data, plugins: updated });
+
+    let updatedChats = data.chats;
+    let currentActive = activeChat;
+    if (currentActive) {
+      const curPluginIds = currentActive.pluginIds || [];
+      let nextPluginIds: string[];
+      if (willBeEnabled) {
+        nextPluginIds = curPluginIds.includes(pluginId) ? curPluginIds : [...curPluginIds, pluginId];
+      } else {
+        nextPluginIds = curPluginIds.filter((id) => id !== pluginId);
+      }
+      currentActive = { ...currentActive, pluginIds: nextPluginIds };
+      updatedChats = updatedChats.map((c) => (c.id === currentActive!.id ? currentActive! : c));
+      setActiveChat(currentActive);
+    }
+
+    updateData({ ...data, plugins: updated, chats: updatedChats });
+  };
+
+  const handleSavePlugin = (plugin: Plugin) => {
+    const exists = data.plugins.find((p) => p.id === plugin.id);
+    const updatedPlugins = exists
+      ? data.plugins.map((p) => (p.id === plugin.id ? plugin : p))
+      : [plugin, ...data.plugins];
+
+    let updatedChats = data.chats;
+    let currentActive = activeChat;
+    if (currentActive && plugin.enabled) {
+      const pIds = currentActive.pluginIds || [];
+      if (!pIds.includes(plugin.id)) {
+        currentActive = { ...currentActive, pluginIds: [...pIds, plugin.id] };
+        updatedChats = updatedChats.map((c) => (c.id === currentActive!.id ? currentActive! : c));
+        setActiveChat(currentActive);
+      }
+    }
+
+    updateData({ ...data, plugins: updatedPlugins, chats: updatedChats });
   };
 
   const handleSaveOpenRouterConfig = (cfg: OpenRouterConfig) => {
@@ -481,7 +603,7 @@ export default function App() {
           onClose={() => setIsPluginModalOpen(false)}
           plugins={data.plugins}
           onTogglePlugin={handleTogglePlugin}
-          onSavePlugin={(p) => updateData({ ...data, plugins: [...data.plugins, p] })}
+          onSavePlugin={handleSavePlugin}
         />
         <OpenRouterSettingsModal
           isOpen={isSettingsOpen}
@@ -593,36 +715,36 @@ export default function App() {
       />
 
       {/* 2. Top Navigation Pill with Dual Track Trigger */}
-      <div className="w-full max-w-4xl mx-auto px-4 flex items-center justify-between gap-2">
-        <div className="flex-1">
-          <TopNavPill
-            activeTab={activeTab}
-            onChangeTab={(t) => {
-              setActiveTab(t);
-              if (t === 'chats') {
-                if (activeChat) setInChatMode(true);
-              } else if (t === 'characters') {
-                setIsCharModalOpen(true);
-              } else if (t === 'lorebooks') {
-                setIsLoreModalOpen(true);
-              } else if (t === 'personas') {
-                setIsPersonaCreatorOpen(false);
-                setPersonaToEdit(null);
-              }
-            }}
-            onOpenMoreMenu={() => setIsSettingsOpen(true)}
-          />
-        </div>
-
-        {/* Prominent Track Screen Button on Dashboard */}
-        <button
-          onClick={() => setIsDualTrackOpen(true)}
-          className="shrink-0 px-3.5 py-2 rounded-full bg-gradient-to-r from-[#ff007f]/30 to-[#9b51e0]/30 hover:from-[#ff007f]/50 hover:to-[#9b51e0]/50 border border-[#ff3399]/60 text-white font-bold text-xs shadow-[0_0_15px_rgba(255,0,128,0.4)] flex items-center space-x-1.5 transition-all hover:scale-105"
-          title="Open Dual Track Screen (Slide-over panels on left and right)"
-        >
-          <Columns className="w-4 h-4 text-[#ff99cc]" />
-          <span className="hidden sm:inline">Track Screen</span>
-        </button>
+      <div className="w-full max-w-4xl mx-auto px-4 py-1">
+        <TopNavPill
+          activeTab={activeTab}
+          onChangeTab={(t) => {
+            setActiveTab(t);
+            if (t === 'chats') {
+              if (activeChat) setInChatMode(true);
+            } else if (t === 'characters') {
+              setIsCharModalOpen(true);
+            } else if (t === 'lorebooks') {
+              setIsLoreModalOpen(true);
+            } else if (t === 'personas') {
+              setIsPersonaCreatorOpen(false);
+              setPersonaToEdit(null);
+            } else if (t === 'settings') {
+              setIsSettingsOpen(true);
+            }
+          }}
+          onOpenMoreMenu={() => setIsSettingsOpen(true)}
+          rightSlot={
+            <button
+              onClick={() => setIsDualTrackOpen(true)}
+              className="px-3.5 py-2 rounded-full bg-gradient-to-r from-[#ff007f]/30 to-[#9b51e0]/30 hover:from-[#ff007f]/50 hover:to-[#9b51e0]/50 border border-[#ff3399]/60 text-white font-bold text-xs shadow-[0_0_15px_rgba(255,0,128,0.4)] flex items-center space-x-1.5 transition-all hover:scale-105"
+              title="Open Dual Track Screen (Slide-over panels on left and right)"
+            >
+              <Columns className="w-4 h-4 text-[#ff99cc]" />
+              <span className="hidden sm:inline">Track Screen</span>
+            </button>
+          }
+        />
       </div>
 
       {/* Main Dashboard Body */}
@@ -650,9 +772,15 @@ export default function App() {
                 setIsPersonaCreatorOpen(true);
               }}
               onSavePersona={handleSavePersona}
+              onSavePersonas={handleSavePersonas}
               onDeletePersona={handleDeletePersona}
               onSelectDefaultPersona={handleSelectDefaultPersona}
               onStartChatWithPersona={handleStartChatWithPersona}
+              onBackToHome={() => setActiveTab('home')}
+              onOpenGallery={(album) => {
+                setGalleryInitialAlbum(album || 'personas');
+                setIsGalleryOpen(true);
+              }}
             />
           )
         ) : (
@@ -819,7 +947,7 @@ export default function App() {
         onClose={() => setIsPluginModalOpen(false)}
         plugins={data.plugins}
         onTogglePlugin={handleTogglePlugin}
-        onSavePlugin={(p) => updateData({ ...data, plugins: [...data.plugins, p] })}
+        onSavePlugin={handleSavePlugin}
       />
 
       <OpenRouterSettingsModal
