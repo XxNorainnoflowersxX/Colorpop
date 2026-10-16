@@ -1,17 +1,37 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
+let app: any = null;
+let authInstance: any = null;
+let dbInstance: any = null;
+let storageInstance: any = null;
 
-export const auth = getAuth(app);
-export const db =
-  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-    : getFirestore(app);
-export const storage = getStorage(app);
+try {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  authInstance = getAuth(app);
+  
+  // Attempt custom db ID, fallback to default if error
+  try {
+    dbInstance =
+      firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+        ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+        : getFirestore(app);
+  } catch (dbErr) {
+    console.warn('Custom Firestore database ID failed, falling back to default:', dbErr);
+    dbInstance = getFirestore(app);
+  }
+
+  storageInstance = getStorage(app);
+} catch (e) {
+  console.error('Failed to initialize Firebase:', e);
+}
+
+export const auth = authInstance;
+export const db = dbInstance;
+export const storage = storageInstance;
 
 export enum OperationType {
   CREATE = 'create',
@@ -43,12 +63,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map((provider) => ({
+      userId: auth?.currentUser?.uid,
+      email: auth?.currentUser?.email,
+      emailVerified: auth?.currentUser?.emailVerified,
+      isAnonymous: auth?.currentUser?.isAnonymous,
+      tenantId: auth?.currentUser?.tenantId,
+      providerInfo: auth?.currentUser?.providerData?.map((provider: any) => ({
         providerId: provider.providerId,
         email: provider.email,
       })) || [],
@@ -61,6 +81,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 export async function testConnection(): Promise<boolean> {
+  if (!db) return false;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
@@ -73,13 +94,12 @@ export async function testConnection(): Promise<boolean> {
 }
 
 export async function signInWithGoogle() {
+  if (!auth) throw new Error('Firebase Auth not initialized');
   const provider = new GoogleAuthProvider();
   return signInWithPopup(auth, provider);
 }
 
 export async function logOutFirebase() {
+  if (!auth) return;
   return signOut(auth);
 }
-
-// Removed immediate top-level call to avoid unhandled rejections during initial load.
-// testConnection();

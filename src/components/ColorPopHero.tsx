@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Heart,
   UserPlus,
@@ -47,19 +47,20 @@ export const ColorPopHero: React.FC<ColorPopHeroProps> = ({
   onOpenPlugins,
   onOpenSettings,
 }) => {
-  // Filter exclusively for images added to the "showcase" album
-  const showcaseImages = (galleryImages && galleryImages.length > 0)
-    ? galleryImages.filter((img) => img.album?.trim().toLowerCase() === 'showcase')
-    : INITIAL_GALLERY_IMAGES.filter((img) => img.album?.toLowerCase() === 'showcase');
-
-  // Fallback if user emptied showcase
-  const activeList = showcaseImages.length > 0
-    ? showcaseImages
-    : INITIAL_GALLERY_IMAGES.filter((img) => img.album?.toLowerCase() === 'showcase');
-
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [randomSpinning, setRandomSpinning] = useState(false);
+
+  // Filter exclusively for images added to the "showcase" album with memoization
+  const activeList = useMemo(() => {
+    const showcase = (galleryImages && galleryImages.length > 0)
+      ? galleryImages.filter((img) => img.album?.trim().toLowerCase() === 'showcase')
+      : INITIAL_GALLERY_IMAGES.filter((img) => img.album?.toLowerCase() === 'showcase');
+
+    return showcase.length > 0
+      ? showcase
+      : INITIAL_GALLERY_IMAGES.filter((img) => img.album?.toLowerCase() === 'showcase');
+  }, [galleryImages]);
 
   // Keep index within bounds if items change
   useEffect(() => {

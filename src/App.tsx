@@ -157,23 +157,26 @@ export default function App() {
     }
 
     // Auth state listener
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setFirebaseUser(u);
-      if (u) {
-        const remote = await loadFromFirebase();
-        if (remote) {
-          setData((prev) => ({
-            ...prev,
-            characters: remote.characters || prev.characters,
-            chats: remote.chats || prev.chats,
-            lorebooks: remote.lorebooks || prev.lorebooks,
-            personas: remote.personas || prev.personas,
-            storyMemories: remote.storyMemories || prev.storyMemories,
-            savedMessages: remote.savedMessages || prev.savedMessages,
-          }));
+    let unsubscribe = () => {};
+    if (auth) {
+      unsubscribe = onAuthStateChanged(auth, async (u) => {
+        setFirebaseUser(u);
+        if (u) {
+          const remote = await loadFromFirebase();
+          if (remote) {
+            setData((prev) => ({
+              ...prev,
+              characters: remote.characters || prev.characters,
+              chats: remote.chats || prev.chats,
+              lorebooks: remote.lorebooks || prev.lorebooks,
+              personas: remote.personas || prev.personas,
+              storyMemories: remote.storyMemories || prev.storyMemories,
+              savedMessages: remote.savedMessages || prev.savedMessages,
+            }));
+          }
         }
-      }
-    });
+      });
+    }
 
     // Test OpenRouter if key exists
     if (data.openRouterConfig.apiKey) {

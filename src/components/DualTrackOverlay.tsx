@@ -137,6 +137,9 @@ export const DualTrackOverlay: React.FC<DualTrackOverlayProps> = ({
     }, 1500);
   };
 
+  // Return early if not open to save DOM rendering overhead
+  if (!isOpen) return null;
+
   // Active chat entities
   const activeChar = characters.find((c) => activeChat?.characterIds?.includes(c.id)) || characters[0];
   const activePersona = personas.find((p) => p.id === activeChat?.personaId) || personas[0];

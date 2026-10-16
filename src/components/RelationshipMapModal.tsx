@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   Sparkles,
@@ -27,6 +27,19 @@ interface RelationshipMapModalProps {
   onUpdateRelationships: (updated: RelationshipEdge[]) => void;
 }
 
+const TYPE_CONFIG: Record<
+  RelationshipType,
+  { label: string; color: string; glow: string; icon: string }
+> = {
+  marriage: { label: 'Marriage', color: '#eab308', glow: 'rgba(234, 179, 8, 0.8)', icon: '💍' },
+  affair: { label: 'Affair', color: '#ff007f', glow: 'rgba(255, 0, 128, 0.9)', icon: '💋' },
+  friendship: { label: 'Friendship', color: '#10b981', glow: 'rgba(16, 185, 129, 0.8)', icon: '🤝' },
+  family: { label: 'Family Dynasty', color: '#06b6d4', glow: 'rgba(6, 182, 212, 0.8)', icon: '👑' },
+  enemy: { label: 'Bitter Enemy', color: '#ef4444', glow: 'rgba(239, 68, 68, 0.9)', icon: '⚔️' },
+  jealousy: { label: 'Jealousy', color: '#a3e635', glow: 'rgba(163, 230, 53, 0.8)', icon: '🔥' },
+  secret: { label: 'Hidden Secret', color: '#a855f7', glow: 'rgba(168, 85, 247, 0.9)', icon: '🤫' },
+};
+
 export const RelationshipMapModal: React.FC<RelationshipMapModalProps> = ({
   isOpen,
   onClose,
@@ -49,47 +62,38 @@ export const RelationshipMapModal: React.FC<RelationshipMapModalProps> = ({
   const [newLabel, setNewLabel] = useState('Secret Liaison');
   const [newSecret, setNewSecret] = useState('Met late at night on the terrace');
 
-  if (!isOpen) return null;
-
   // Combine characters and personas as graph nodes
-  const nodes = [
-    ...characters.map((c) => ({
-      id: c.id,
-      name: c.name,
-      avatar: c.avatar,
-      role: 'Character',
-      isUser: false,
-    })),
-    ...personas.map((p) => ({
-      id: p.id,
-      name: p.name,
-      avatar: p.avatar,
-      role: 'Your Persona',
-      isUser: true,
-    })),
-  ];
+  const nodes = useMemo(
+    () => [
+      ...characters.map((c) => ({
+        id: c.id,
+        name: c.name,
+        avatar: c.avatar,
+        role: 'Character',
+        isUser: false,
+      })),
+      ...personas.map((p) => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        role: 'Your Persona',
+        isUser: true,
+      })),
+    ],
+    [characters, personas]
+  );
 
-  const typeConfig: Record<
-    RelationshipType,
-    { label: string; color: string; glow: string; icon: string }
-  > = {
-    marriage: { label: 'Marriage', color: '#eab308', glow: 'rgba(234, 179, 8, 0.8)', icon: '💍' },
-    affair: { label: 'Affair', color: '#ff007f', glow: 'rgba(255, 0, 128, 0.9)', icon: '💋' },
-    friendship: { label: 'Friendship', color: '#10b981', glow: 'rgba(16, 185, 129, 0.8)', icon: '🤝' },
-    family: { label: 'Family Dynasty', color: '#06b6d4', glow: 'rgba(6, 182, 212, 0.8)', icon: '👑' },
-    enemy: { label: 'Bitter Enemy', color: '#ef4444', glow: 'rgba(239, 68, 68, 0.9)', icon: '⚔️' },
-    jealousy: { label: 'Jealousy', color: '#a3e635', glow: 'rgba(163, 230, 53, 0.8)', icon: '🔥' },
-    secret: { label: 'Hidden Secret', color: '#a855f7', glow: 'rgba(168, 85, 247, 0.9)', icon: '🤫' },
-  };
+  const typeConfig = TYPE_CONFIG;
 
   // Filtered edges
-  const filteredEdges =
-    filterType === 'all'
-      ? relationships
-      : relationships.filter((e) => e.type === filterType);
+  const filteredEdges = useMemo(
+    () => (filterType === 'all' ? relationships : relationships.filter((e) => e.type === filterType)),
+    [relationships, filterType]
+  );
 
-  // 3D Orbit & Canvas Simulation
+  // 3D Orbit & Canvas Simulation (unconditional hook execution)
   useEffect(() => {
+    if (!isOpen) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -98,10 +102,18 @@ export const RelationshipMapModal: React.FC<RelationshipMapModalProps> = ({
     let animationFrameId: number;
     let angle = 0;
 
+    let width = (canvas.width = canvas.parentElement?.clientWidth || 700);
+    let height = (canvas.height = canvas.parentElement?.clientHeight || 450);
+
+    const handleResize = () => {
+      if (!canvas || !canvas.parentElement) return;
+      width = canvas.width = canvas.parentElement.clientWidth || 700;
+      height = canvas.height = canvas.parentElement.clientHeight || 450;
+    };
+    window.addEventListener('resize', handleResize);
+
     // Node positioning in 3D orbit
     const render = () => {
-      const width = (canvas.width = canvas.parentElement?.clientWidth || 700);
-      const height = (canvas.height = canvas.parentElement?.clientHeight || 450);
       const centerX = width / 2;
       const centerY = height / 2;
 
@@ -248,8 +260,13 @@ export const RelationshipMapModal: React.FC<RelationshipMapModalProps> = ({
 
     render();
 
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [nodes, filteredEdges, selectedNodeId, selectedEdgeId]);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isOpen, nodes, filteredEdges, selectedNodeId, selectedEdgeId]);
+
+  if (!isOpen) return null;
 
   const handleCreateConnection = (e: React.FormEvent) => {
     e.preventDefault();

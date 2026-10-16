@@ -154,43 +154,66 @@ export function loadLocalData(): StorageData {
   };
 }
 
+let saveTimeout: any = null;
+let pendingSaveData: StorageData | null = null;
+
 export function saveLocalData(data: StorageData): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (err) {
-    console.error('Failed to save to localStorage:', err);
+  pendingSaveData = data;
+  if (!saveTimeout) {
+    saveTimeout = setTimeout(() => {
+      saveTimeout = null;
+      if (pendingSaveData) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingSaveData));
+        } catch (err) {
+          console.error('Failed to save to localStorage:', err);
+        }
+      }
+    }, 200);
   }
 }
 
-export async function syncToFirebase(data: StorageData): Promise<void> {
-  const user = auth.currentUser;
-  if (!user) return;
+let syncTimeout: any = null;
+let pendingSyncData: StorageData | null = null;
 
-  try {
-    const userDocRef = doc(db, 'users', user.uid);
-    await setDoc(
-      userDocRef,
-      {
-        characters: data.characters,
-        lorebooks: data.lorebooks,
-        personas: data.personas,
-        plugins: data.plugins,
-        chats: data.chats,
-        activeChatId: data.activeChatId || '',
-        storyMemories: data.storyMemories || [],
-        savedMessages: data.savedMessages || [],
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
-  } catch (err) {
-    console.warn('Could not sync to Firebase Firestore:', err);
-  }
+export async function syncToFirebase(data: StorageData): Promise<void> {
+  const user = auth?.currentUser;
+  if (!user || !db) return;
+
+  pendingSyncData = data;
+  if (syncTimeout) clearTimeout(syncTimeout);
+
+  syncTimeout = setTimeout(async () => {
+    syncTimeout = null;
+    if (!pendingSyncData) return;
+    const toSync = pendingSyncData;
+
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      await setDoc(
+        userDocRef,
+        {
+          characters: toSync.characters,
+          lorebooks: toSync.lorebooks,
+          personas: toSync.personas,
+          plugins: toSync.plugins,
+          chats: toSync.chats,
+          activeChatId: toSync.activeChatId || '',
+          storyMemories: toSync.storyMemories || [],
+          savedMessages: toSync.savedMessages || [],
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn('Could not sync to Firebase Firestore:', err);
+    }
+  }, 1000);
 }
 
 export async function loadFromFirebase(): Promise<Partial<StorageData> | null> {
-  const user = auth.currentUser;
-  if (!user) return null;
+  const user = auth?.currentUser;
+  if (!user || !db) return null;
 
   try {
     const userDocRef = doc(db, 'users', user.uid);
