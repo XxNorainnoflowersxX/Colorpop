@@ -86,6 +86,7 @@ export interface ChatMessage {
   currentSwipeIndex?: number;
   emotions?: string[];
   tokens?: number;
+  isPinned?: boolean;
 }
 
 export interface Chat {
@@ -145,3 +146,115 @@ export interface StoryMemory {
   content: string;
   createdAt: string;
 }
+
+export interface GalleryImage {
+  id: string;
+  url: string;
+  title: string;
+  album: string; // e.g. "showcase"
+  caption?: string;
+  tags?: string[];
+  createdAt: string;
+}
+
+// ==========================================
+// 1. LIVING RELATIONSHIP MAP
+// ==========================================
+export type RelationshipType =
+  | 'friendship'
+  | 'marriage'
+  | 'enemy'
+  | 'affair'
+  | 'secret'
+  | 'family'
+  | 'jealousy';
+
+export interface RelationshipEdge {
+  id: string;
+  sourceId: string; // Character ID or 'user'
+  targetId: string;
+  type: RelationshipType;
+  strength: number; // 0 - 100
+  label: string;
+  secretDescription?: string;
+  isReciprocal: boolean;
+  historyEvents?: string[];
+}
+
+// ==========================================
+// 2. INTERACTIVE WORLD AND HOUSE MEMORY
+// ==========================================
+export interface WorldRoom {
+  id: string;
+  name: string;
+  category: 'bedroom' | 'terrace' | 'lounge' | 'garage' | 'vault' | 'office' | 'cellar' | 'pool';
+  image: string;
+  description: string;
+  occupantIds: string[]; // Character IDs currently in this room
+  belongings: string[]; // Character belongings stored here
+  furniture: string[]; // Luxury furniture pieces
+  pastEvents: string[]; // Past events and roleplay memories tied to this room
+}
+
+export interface WorldLocation {
+  id: string;
+  name: string;
+  type: 'mansion' | 'apartment' | 'car' | 'business' | 'club';
+  image: string;
+  address: string;
+  description: string;
+  rooms: WorldRoom[];
+  createdAt: string;
+}
+
+// ==========================================
+// 3. FICTIONAL SOCIAL MEDIA SIMULATOR
+// ==========================================
+export interface SocialMediaComment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  content: string;
+  timestamp: number;
+  likes: number;
+}
+
+export interface SocialMediaPost {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  authorHandle: string;
+  reputationBadge?: string;
+  content: string;
+  image?: string;
+  timestamp: number;
+  likes: number;
+  isLiked?: boolean;
+  comments: SocialMediaComment[];
+  tags: string[];
+  location?: string;
+}
+
+export interface SocialStory {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  image: string;
+  caption?: string;
+  hasUnseen: boolean;
+}
+
+export interface SocialDM {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  content: string;
+  timestamp: number;
+  isUnread: boolean;
+}
+
+

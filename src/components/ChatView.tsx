@@ -25,6 +25,17 @@ import {
   FileText,
   X,
   ExternalLink,
+  Volume2,
+  VolumeX,
+  Minimize2,
+  Upload,
+  Pin,
+  RotateCcw,
+  Play,
+  ChevronLeft,
+  ChevronRight,
+  GitBranch,
+  Check,
 } from 'lucide-react';
 import {
   Chat,
@@ -62,6 +73,9 @@ interface ChatViewProps {
   onOpenGitHubSyncModal: () => void;
   onTogglePlugin: (pluginId: string) => void;
   onBookmarkMessage: (msg: ChatMessage) => void;
+  onDeleteChat?: (chatId: string) => void;
+  onImportChat?: (newChat: Chat) => void;
+  onBranchChat?: (fromMsgId: string, branchTitle: string) => void;
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
@@ -87,6 +101,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   onOpenGitHubSyncModal,
   onTogglePlugin,
   onBookmarkMessage,
+  onDeleteChat,
+  onImportChat,
 }) => {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -95,6 +111,17 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [editContent, setEditContent] = useState('');
   const [diceResult, setDiceResult] = useState<string | null>(null);
   const [savedSuccessMsg, setSavedSuccessMsg] = useState<string | null>(null);
+
+  // Text-To-Speech (TTS) System
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const [autoTTS, setAutoTTS] = useState(false);
+
+  // Modal States: Condense, Import, Delete
+  const [showCondenseModal, setShowCondenseModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importPlatform, setImportPlatform] = useState<'plain' | 'cai' | 'sillytavern'>('plain');
 
   // Dual Track Screen State (Left and Right Slide-over Panels)
   const [isDualTrackOpen, setIsDualTrackOpen] = useState(false);
@@ -217,6 +244,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
         messages: [...updatedMessages, replyMessage],
         updatedAt: new Date().toISOString(),
       });
+
+      if (autoTTS) {
+        speakMessage(replyMessage.id, replyMessage.content);
+      }
     } catch (err: any) {
       setErrorDetails({
         message: err.message || 'Network connection failed while reaching OpenRouter.',
@@ -224,6 +255,153 @@ export const ChatView: React.FC<ChatViewProps> = ({
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Text-To-Speech (TTS) Voice Synthesis
+  const stopTTS = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeakingMsgId(null);
+  };
+
+  const speakMessage = (msgId: string, content: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    if (speakingMsgId === msgId) {
+      stopTTS();
+      return;
+    }
+    window.speechSynthesis.cancel();
+
+    // Clean narration asterisks for smooth dialogue reading
+    const cleanSpeech = content.replace(/\*.*?\*/g, '').trim() || content.replace(/\*/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanSpeech);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.05;
+
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find((v) => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Victoria')));
+    if (preferredVoice) utterance.voice = preferredVoice;
+
+    utterance.onend = () => setSpeakingMsgId(null);
+    utterance.onerror = () => setSpeakingMsgId(null);
+
+    setSpeakingMsgId(msgId);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Condense past messages to reduce token consumption while preserving story context
+  const handleCondenseHistory = () => {
+    if (chat.messages.length <= 3) return;
+
+    const olderMsgs = chat.messages.slice(0, chat.messages.length - 3);
+    const recentMsgs = chat.messages.slice(chat.messages.length - 3);
+
+    const condensedSummary = `[Narrative Memory Summary of Prior Events: The roleplay unfolded across ${olderMsgs.length} messages involving ${activeCharacters.map((c) => c.name).join(', ')} and ${activePersona?.name || 'You'}. Key dramatic beats, intimate tension, and character dynamics have occurred. Recent exchanges resume below.]`;
+
+    const summaryMessage: ChatMessage = {
+      id: `msg_condensed_${Date.now()}`,
+      senderId: 'system',
+      senderName: 'Story Memory Archive',
+      content: condensedSummary,
+      timestamp: Date.now(),
+    };
+
+    onUpdateChat({
+      ...chat,
+      messages: [summaryMessage, ...recentMsgs],
+      updatedAt: new Date().toISOString(),
+    });
+    setShowCondenseModal(false);
+    setSavedSuccessMsg('Condensed earlier messages into story memory!');
+    setTimeout(() => setSavedSuccessMsg(null), 3000);
+  };
+
+  // Import chats from Character.AI, SillyTavern, TavernAI, or plain transcript
+  const handleExecuteImport = () => {
+    if (!importText.trim()) return;
+    try {
+      let importedMsgs: ChatMessage[] = [];
+      let parsedTitle = `Imported Chat (${new Date().toLocaleDateString()})`;
+
+      if (importPlatform === 'sillytavern' || importText.trim().startsWith('{')) {
+        const json = JSON.parse(importText);
+        if (json.messages && Array.isArray(json.messages)) {
+          importedMsgs = json.messages.map((m: any, idx: number) => ({
+            id: `msg_imp_${Date.now()}_${idx}`,
+            senderId: m.is_user ? 'user' : (activeCharacters[0]?.id || 'char_imp'),
+            senderName: m.name || (m.is_user ? (activePersona?.name || 'You') : (activeCharacters[0]?.name || 'Character')),
+            content: m.mes || m.content || '',
+            timestamp: m.send_date || Date.now() + idx * 1000,
+          }));
+        }
+      } else {
+        const lines = importText.split('\n').filter((l) => l.trim().length > 0);
+        importedMsgs = lines.map((line, idx) => {
+          const splitIdx = line.indexOf(':');
+          if (splitIdx > 0 && splitIdx < 30) {
+            const sender = line.slice(0, splitIdx).trim();
+            const content = line.slice(splitIdx + 1).trim();
+            const isUser = sender.toLowerCase() === 'you' || sender.toLowerCase() === 'user';
+            return {
+              id: `msg_imp_${Date.now()}_${idx}`,
+              senderId: isUser ? 'user' : (activeCharacters[0]?.id || 'char_imp'),
+              senderName: sender,
+              content,
+              timestamp: Date.now() + idx * 1000,
+            };
+          }
+          return {
+            id: `msg_imp_${Date.now()}_${idx}`,
+            senderId: idx % 2 === 0 ? 'user' : (activeCharacters[0]?.id || 'char_imp'),
+            senderName: idx % 2 === 0 ? (activePersona?.name || 'You') : (activeCharacters[0]?.name || 'Character'),
+            content: line.trim(),
+            timestamp: Date.now() + idx * 1000,
+          };
+        });
+      }
+
+      if (importedMsgs.length > 0) {
+        const newImportedChat: Chat = {
+          id: `chat_imp_${Date.now()}`,
+          title: parsedTitle,
+          characterIds: chat.characterIds,
+          personaId: chat.personaId,
+          lorebookIds: chat.lorebookIds,
+          pluginIds: chat.pluginIds,
+          scenario: chat.scenario,
+          bgImage: chat.bgImage,
+          relationshipScore: 85,
+          messages: importedMsgs,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (onImportChat) {
+          onImportChat(newImportedChat);
+        } else {
+          onUpdateChat({
+            ...chat,
+            messages: [...chat.messages, ...importedMsgs],
+            updatedAt: new Date().toISOString(),
+          });
+        }
+        setShowImportModal(false);
+        setImportText('');
+        setSavedSuccessMsg('Imported chat successfully!');
+        setTimeout(() => setSavedSuccessMsg(null), 3000);
+      }
+    } catch (e: any) {
+      alert('Could not parse imported format: ' + e.message);
     }
   };
 
@@ -328,6 +506,51 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <Heart className="w-3.5 h-3.5 fill-[#ff007f] text-[#ff007f] animate-pulse" />
             <span>{chat.relationshipScore ?? 92}%</span>
           </button>
+
+          {/* Auto-TTS Toggle Button */}
+          <button
+            onClick={() => {
+              if (autoTTS) stopTTS();
+              setAutoTTS(!autoTTS);
+            }}
+            className={`p-2 rounded-xl border transition-all ${
+              autoTTS
+                ? 'bg-[#ff007f] border-[#ff66b2] text-white shadow-[0_0_12px_rgba(255,0,128,0.7)]'
+                : 'bg-white/10 hover:bg-white/20 border-white/10 text-[#ffd6eb]/80'
+            }`}
+            title={autoTTS ? 'Auto Voice Reading ON (Click to disable)' : 'Enable Auto Voice Reading for Character Replies'}
+          >
+            {autoTTS ? <Volume2 className="w-4 h-4 text-white animate-pulse" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          {/* Condense History Button */}
+          <button
+            onClick={() => setShowCondenseModal(true)}
+            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-amber-300 transition-colors"
+            title="Condense Past Messages to save context tokens"
+          >
+            <Minimize2 className="w-4 h-4" />
+          </button>
+
+          {/* Import Chat Button */}
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-emerald-400 transition-colors"
+            title="Import chats from other platforms"
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+
+          {/* Delete Chat Button */}
+          {onDeleteChat && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="p-2 rounded-xl bg-white/10 hover:bg-rose-600 border border-white/10 text-rose-300 hover:text-white transition-colors"
+              title="Delete this chat"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Scene Background Button */}
           <button
@@ -454,6 +677,35 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   <span className={isUser ? 'text-white' : 'text-[#ff99cc]'}>{msg.senderName}</span>
 
                   <div className="flex items-center space-x-2">
+                    {/* Speaking Active Indicator */}
+                    {speakingMsgId === msg.id && (
+                      <span className="text-[9px] font-mono text-[#ff99cc] flex items-center gap-1 animate-pulse">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#ff007f] animate-ping" />
+                        <span>Playing Voice...</span>
+                      </span>
+                    )}
+
+                    {!isUser && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          speakMessage(msg.id, msg.content);
+                        }}
+                        className={`p-0.5 transition-colors ${
+                          speakingMsgId === msg.id
+                            ? 'text-[#ff007f] animate-pulse opacity-100'
+                            : 'opacity-0 group-hover:opacity-100 hover:text-[#ff99cc]'
+                        }`}
+                        title={speakingMsgId === msg.id ? 'Stop Voice Speech' : 'Listen with Character Voice TTS'}
+                      >
+                        {speakingMsgId === msg.id ? (
+                          <VolumeX className="w-3.5 h-3.5 text-[#ff007f]" />
+                        ) : (
+                          <Volume2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+
                     <span className="opacity-60 font-mono">
                       {new Date(msg.timestamp).toLocaleTimeString([], {
                         hour: '2-digit',
@@ -626,6 +878,184 @@ export const ChatView: React.FC<ChatViewProps> = ({
           onUpdateChat({ ...chat, relationshipScore: updatedScore });
         }}
       />
+
+      {/* Condense Past Messages Modal */}
+      {showCondenseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-[#180517] border-2 border-[#ff3399]/60 rounded-3xl p-6 shadow-[0_0_40px_rgba(255,0,128,0.5)] space-y-4 text-[#ffd6eb]">
+            <div className="flex items-center justify-between border-b border-[#ff3399]/30 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  <Minimize2 className="w-5 h-5" />
+                </div>
+                <h3 className="text-lg font-bold text-white">Condense Chat History</h3>
+              </div>
+              <button onClick={() => setShowCondenseModal(false)} className="text-white/60 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <p className="text-white/90">
+                Condensing compresses older dialogue exchanges into an executive narrative memory summary, significantly reducing token consumption while keeping your AI focused and responsive.
+              </p>
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+                <div className="flex justify-between font-mono text-[11px] text-[#ff99cc]">
+                  <span>Total Messages in Chat:</span>
+                  <span className="font-bold text-white">{chat.messages.length}</span>
+                </div>
+                <div className="flex justify-between font-mono text-[11px] text-[#ffd6eb]/70">
+                  <span>Messages to condense:</span>
+                  <span className="text-amber-300 font-bold">{Math.max(0, chat.messages.length - 3)}</span>
+                </div>
+                <div className="flex justify-between font-mono text-[11px] text-emerald-300">
+                  <span>Recent messages preserved verbatim:</span>
+                  <span className="font-bold">Last 3</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setShowCondenseModal(false)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCondenseHistory}
+                disabled={chat.messages.length <= 3}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(245,158,11,0.6)] disabled:opacity-40"
+              >
+                Condense Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Chat Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-xl bg-[#180517] border-2 border-[#ff3399]/60 rounded-3xl p-6 shadow-[0_0_40px_rgba(255,0,128,0.5)] space-y-4 text-[#ffd6eb]">
+            <div className="flex items-center justify-between border-b border-[#ff3399]/30 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <h3 className="text-lg font-bold text-white">Import Chat From Other Platforms</h3>
+              </div>
+              <button onClick={() => setShowImportModal(false)} className="text-white/60 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Platform Format Select */}
+            <div className="flex items-center space-x-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setImportPlatform('plain')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                  importPlatform === 'plain'
+                    ? 'bg-[#ff007f] text-white shadow'
+                    : 'bg-white/5 hover:bg-white/10 text-white/70'
+                }`}
+              >
+                Plain Text Dialogue
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportPlatform('sillytavern')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                  importPlatform === 'sillytavern'
+                    ? 'bg-[#ff007f] text-white shadow'
+                    : 'bg-white/5 hover:bg-white/10 text-white/70'
+                }`}
+              >
+                SillyTavern / Tavern JSON
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportPlatform('cai')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                  importPlatform === 'cai'
+                    ? 'bg-[#ff007f] text-white shadow'
+                    : 'bg-white/5 hover:bg-white/10 text-white/70'
+                }`}
+              >
+                Character.AI Export
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-white mb-1.5">
+                Paste chat transcript or exported JSON:
+              </label>
+              <textarea
+                rows={8}
+                placeholder={
+                  importPlatform === 'sillytavern'
+                    ? '{ "messages": [ { "name": "Lucious", "mes": "Hey...", "is_user": false } ] }'
+                    : 'Lucious: Took you long enough, beautiful.\nYou: I was held up at the ballroom.\nLucious: Then let\'s make up for lost time.'
+                }
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                className="w-full bg-[#12030e] border border-[#ff3399]/40 focus:border-[#ff3399] rounded-2xl p-3 text-xs text-white font-mono placeholder-white/30 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExecuteImport}
+                disabled={!importText.trim()}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(16,185,129,0.6)] disabled:opacity-40"
+              >
+                Import Chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Chat Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-md bg-[#180517] border-2 border-rose-500/60 rounded-3xl p-6 shadow-[0_0_40px_rgba(244,63,94,0.5)] space-y-4 text-[#ffd6eb]">
+            <div className="flex items-center space-x-2 text-rose-400">
+              <Trash2 className="w-5 h-5" />
+              <h3 className="text-lg font-bold text-white">Delete Entire Chat?</h3>
+            </div>
+
+            <p className="text-xs text-white/80">
+              Are you sure you want to delete this chat with <strong className="text-white">{chat.title}</strong>? All {chat.messages.length} messages and relationship state will be removed.
+            </p>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  if (onDeleteChat) onDeleteChat(chat.id);
+                }}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 text-white font-bold text-xs shadow-[0_0_15px_rgba(225,29,72,0.8)]"
+              >
+                Delete Chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

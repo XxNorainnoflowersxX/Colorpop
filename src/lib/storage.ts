@@ -1,5 +1,32 @@
-import { Character, Lorebook, Persona, Plugin, Chat, OpenRouterConfig, SupabaseConfig, StoryMemory } from '../types/roleplay';
-import { INITIAL_CHARACTERS, INITIAL_LOREBOOKS, INITIAL_PERSONAS, INITIAL_PLUGINS, INITIAL_CHATS } from './defaultData';
+import {
+  Character,
+  Lorebook,
+  Persona,
+  Plugin,
+  Chat,
+  OpenRouterConfig,
+  SupabaseConfig,
+  StoryMemory,
+  GalleryImage,
+  RelationshipEdge,
+  WorldLocation,
+  SocialMediaPost,
+  SocialStory,
+  SocialDM,
+} from '../types/roleplay';
+import {
+  INITIAL_CHARACTERS,
+  INITIAL_LOREBOOKS,
+  INITIAL_PERSONAS,
+  INITIAL_PLUGINS,
+  INITIAL_CHATS,
+  INITIAL_GALLERY_IMAGES,
+  INITIAL_RELATIONSHIP_EDGES,
+  INITIAL_WORLD_LOCATIONS,
+  INITIAL_SOCIAL_POSTS,
+  INITIAL_SOCIAL_STORIES,
+  INITIAL_SOCIAL_DMS,
+} from './defaultData';
 import { db, auth } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -21,6 +48,12 @@ export interface StorageData {
     content: string;
     timestamp: number;
   }>;
+  galleryImages: GalleryImage[];
+  relationshipEdges: RelationshipEdge[];
+  worldLocations: WorldLocation[];
+  socialPosts: SocialMediaPost[];
+  socialStories: SocialStory[];
+  socialDMs: SocialDM[];
 }
 
 const STORAGE_KEY = 'colorpop_roleplay_app_data_v2';
@@ -89,6 +122,12 @@ export function loadLocalData(): StorageData {
         supabaseConfig: { ...DEFAULT_SUPABASE_CONFIG, ...(parsed.supabaseConfig || {}) },
         storyMemories: parsed.storyMemories || DEFAULT_MEMORIES,
         savedMessages: parsed.savedMessages || DEFAULT_SAVED_MSGS,
+        galleryImages: parsed.galleryImages?.length ? parsed.galleryImages : INITIAL_GALLERY_IMAGES,
+        relationshipEdges: parsed.relationshipEdges?.length ? parsed.relationshipEdges : INITIAL_RELATIONSHIP_EDGES,
+        worldLocations: parsed.worldLocations?.length ? parsed.worldLocations : INITIAL_WORLD_LOCATIONS,
+        socialPosts: parsed.socialPosts?.length ? parsed.socialPosts : INITIAL_SOCIAL_POSTS,
+        socialStories: parsed.socialStories?.length ? parsed.socialStories : INITIAL_SOCIAL_STORIES,
+        socialDMs: parsed.socialDMs?.length ? parsed.socialDMs : INITIAL_SOCIAL_DMS,
       };
     }
   } catch (err) {
@@ -106,6 +145,12 @@ export function loadLocalData(): StorageData {
     supabaseConfig: DEFAULT_SUPABASE_CONFIG,
     storyMemories: DEFAULT_MEMORIES,
     savedMessages: DEFAULT_SAVED_MSGS,
+    galleryImages: INITIAL_GALLERY_IMAGES,
+    relationshipEdges: INITIAL_RELATIONSHIP_EDGES,
+    worldLocations: INITIAL_WORLD_LOCATIONS,
+    socialPosts: INITIAL_SOCIAL_POSTS,
+    socialStories: INITIAL_SOCIAL_STORIES,
+    socialDMs: INITIAL_SOCIAL_DMS,
   };
 }
 
